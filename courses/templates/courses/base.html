@@ -4,82 +4,94 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}搜尋課程{% endblock %} · 選課系統</title>
+  <title>{% block title %}選課{% endblock %} · 選課系統</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'css/components.css' %}">
   <link rel="stylesheet" href="{% static 'courses/app.css' %}">
+  {% block extra_head %}{% endblock %}
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
+<div class="nprogress" id="nprogress" hidden><div class="nprogress-bar"></div></div>
+<div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
 <div class="shell">
-  <aside class="sidebar">
-    <a class="brand" href="{% url 'course_list' %}">
-      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
-        <rect width="26" height="26" rx="7" fill="var(--accent-soft)"/>
-        <rect x="6" y="7" width="4" height="4" rx="1" fill="var(--accent)"/>
-        <rect x="11" y="7" width="4" height="4" rx="1" fill="var(--accent-track)"/>
-        <rect x="16" y="7" width="4" height="4" rx="1" fill="var(--accent-track)"/>
-        <rect x="6" y="12" width="4" height="4" rx="1" fill="var(--accent-track)"/>
-        <rect x="11" y="12" width="4" height="4" rx="1" fill="var(--accent)"/>
-        <rect x="16" y="12" width="4" height="4" rx="1" fill="var(--accent-track)"/>
-        <rect x="6" y="17" width="4" height="4" rx="1" fill="var(--accent-track)"/>
-        <rect x="11" y="17" width="4" height="4" rx="1" fill="var(--accent-track)"/>
-        <rect x="16" y="17" width="4" height="4" rx="1" fill="var(--accent)"/>
-      </svg>
-      選課系統</a>
+  <aside class="sidebar" id="app-sidebar">
+    <div class="sidebar-top">
+      {% include "courses/_brand.html" %}
+      <button class="icon-btn sidebar-collapse-toggle" id="sidebar-collapse-toggle" type="button" aria-controls="app-sidebar" aria-expanded="true" aria-label="收合側邊欄" title="收合側邊欄">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M14 9l-3 3 3 3"/></svg>
+      </button>
+    </div>
     {% include "courses/_nav.html" %}
   </aside>
 
-  <header class="topbar">
-    <a class="brand" href="{% url 'course_list' %}">
-      <svg width="24" height="24" viewBox="0 0 26 26" aria-hidden="true">
-        <rect width="26" height="26" rx="7" fill="var(--accent-soft)"/>
-        <rect x="6" y="7" width="4" height="4" rx="1" fill="var(--accent)"/>
-        <rect x="11" y="7" width="4" height="4" rx="1" fill="var(--accent-track)"/>
-        <rect x="16" y="7" width="4" height="4" rx="1" fill="var(--accent-track)"/>
-        <rect x="6" y="12" width="4" height="4" rx="1" fill="var(--accent-track)"/>
-        <rect x="11" y="12" width="4" height="4" rx="1" fill="var(--accent)"/>
-        <rect x="16" y="12" width="4" height="4" rx="1" fill="var(--accent-track)"/>
-        <rect x="6" y="17" width="4" height="4" rx="1" fill="var(--accent-track)"/>
-        <rect x="11" y="17" width="4" height="4" rx="1" fill="var(--accent-track)"/>
-        <rect x="16" y="17" width="4" height="4" rx="1" fill="var(--accent)"/>
-      </svg>
-      選課系統</a>
-    <details class="menu">
-      <summary><span class="open-label">選單</span><span class="close-label">關閉</span></summary>
-      <div class="sheet">
-        {% include "courses/_nav.html" %}
-      </div>
-    </details>
-  </header>
+  <div class="workspace">
+    <header class="app-header">
+      <button class="icon-btn" id="sidebar-toggle" type="button" aria-controls="app-sidebar" aria-expanded="false" aria-label="開啟選單">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      {% include "courses/_brand.html" with compact=1 %}
+      {% if current_term_label %}<div class="header-term">選課學年期：{{ current_term_label }}</div>{% endif %}
+      <div class="header-spacer"></div>
+      {% if user.is_authenticated %}
+      <details class="user-menu">
+        <summary>
+          <span class="avatar" aria-hidden="true">{{ user.first_name|default:user.username|slice:":1" }}</span>
+          <span class="who-name">{{ user.first_name|default:user.username }}</span>
+        </summary>
+        <div class="user-menu-panel">
+          <div class="user-menu-meta">{{ user.email|default:"已登入" }}</div>
+          {% if user.is_authenticated %}
+          <a class="btn btn-ghost" href="{% url 'my_profile' %}">個人資料</a>
+          {% endif %}
+          <form method="post" action="{% url 'logout' %}" class="inline-form">{% csrf_token %}
+            <button class="btn btn-ghost" type="submit">登出</button>
+          </form>
+        </div>
+      </details>
+      {% else %}
+      <a class="btn btn-secondary" href="{% url 'login' %}">登入</a>
+      {% endif %}
+    </header>
 
-  <main class="canvas">
-    {% if waitlist_banner %}
-    <div class="notice notice-waitlist" role="status">
-      🎉 有位置空出：你已遞補進 <strong>{% for n in waitlist_banner %}{{ n }}{% if not forloop.last %}、{% endif %}{% endfor %}</strong>，去「我的課表」看看吧。
-      <form method="post" action="{% url 'ack_promotion' %}" class="inline-form">{% csrf_token %}
-        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-        <button class="btn btn-secondary" type="submit">知道了</button>
-      </form>
-    </div>
-    {% endif %}
-    {% for m in messages %}<div class="notice notice-{{ m.tags }}" role="status">{{ m }}</div>{% endfor %}
-    {% block content %}{% endblock %}
-  </main>
+    <main class="canvas">
+      {% if waitlist_banner %}
+      <div class="notice notice-waitlist" role="status">
+        有位置空出：你已遞補進 <strong>{% for n in waitlist_banner %}{{ n }}{% if not forloop.last %}、{% endif %}{% endfor %}</strong>，去「我的課表」看看吧。
+        <form method="post" action="{% url 'ack_promotion' %}" class="inline-form">{% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <button class="btn btn-secondary" type="submit">知道了</button>
+        </form>
+      </div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
 </div>
+
+<div class="toast-root" id="toast-root" aria-live="polite"></div>
+
+<dialog class="modal" id="confirm-dialog" aria-labelledby="confirm-title">
+  <div class="modal-inner">
+    <h2 class="modal-title" id="confirm-title">請確認</h2>
+    <p class="modal-body"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" data-confirm-cancel>取消</button>
+      <button type="button" class="btn btn-danger" data-confirm-ok>確定</button>
+    </div>
+  </div>
+</dialog>
+
 <script>
-// 送出後立即反饋（整頁跳轉前）：停用按鈕並加轉圈
-document.querySelectorAll("form.inline-form").forEach(function (form) {
-  form.addEventListener("submit", function () {
-    var btn = form.querySelector("button");
-    if (!btn || btn.disabled) return;
-    btn.disabled = true;
-    var s = document.createElement("span");
-    s.className = "spinner";
-    s.setAttribute("aria-hidden", "true");
-    btn.append(s);
-  });
-});
+  window.__DJANGO_MESSAGES__ = [
+    {% for m in messages %}
+    {type: "{{ m.tags|escapejs }}", message: "{{ m|escapejs }}"}{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ];
 </script>
+<script src="{% static 'js/ui.js' %}"></script>
+{% block extra_js %}{% endblock %}
 </body>
 </html>

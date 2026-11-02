@@ -1,0 +1,38 @@
+{% for field in basic_fields %}
+  <div class="form-row">
+    {{ field.errors }}
+    {{ field.label_tag }}
+    {% if read_only %}
+      <div>{{ field.value|default:"未提供"|linebreaksbr }}</div>
+    {% else %}
+      {{ field }}
+    {% endif %}
+  </div>
+{% endfor %}
+
+<details class="module">
+  <summary>18 週教學進度</summary>
+  {% for field in weekly_fields %}
+    <div class="form-row">
+      {{ field.errors }}
+      {{ field.label_tag }}
+      {% if read_only %}
+        <div>{{ field.value|default:"未提供"|linebreaksbr }}</div>
+      {% else %}
+        {{ field }}
+      {% endif %}
+    </div>
+  {% endfor %}
+</details>
+
+{% for field in closing_fields %}
+  <div class="form-row">
+    {{ field.errors }}
+    {{ field.label_tag }}
+    {% if read_only %}
+      <div>{{ field.value|default:"未提供"|linebreaksbr }}</div>
+    {% else %}
+      {{ field }}
+    {% endif %}
+  </div>
+{% endfor %}

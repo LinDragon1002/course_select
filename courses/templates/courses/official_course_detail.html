@@ -1,0 +1,65 @@
+{% extends "courses/base.html" %}
+{% block title %}{{ entry.course_name }}{% endblock %}
+{% block content %}
+<nav class="detail-breadcrumb" aria-label="麵包屑">
+  <a href="{% url 'my_schedule' %}">我的課表</a>
+  <span aria-hidden="true">›</span>
+  <span>{{ entry.course_name }}</span>
+</nav>
+
+<main class="official-syllabus-document">
+  <h1 class="official-syllabus-title">國立臺北商業大學 教學大綱</h1>
+  <div class="official-syllabus-table-wrap">
+    <table class="official-syllabus-table official-syllabus-basic" aria-label="官方課程基本資料">
+      <tbody>
+        <tr>
+          <th scope="row">學年</th>
+          <td>{{ academic_year|default:"未提供" }}</td>
+          <th scope="row">學期</th>
+          <td>{{ semester_label|default:"未提供" }}</td>
+        </tr>
+        <tr>
+          <th scope="row">開課班級</th>
+          <td>{{ snapshot.class_group.code|default:"未提供" }}</td>
+          <th scope="row">科目名稱</th>
+          <td>{{ entry.course_name|default:"未提供" }}{% if syllabus.course_name_en %}<small class="official-syllabus-english">{{ syllabus.course_name_en }}</small>{% endif %}</td>
+        </tr>
+        <tr>
+          <th scope="row">學分數</th>
+          <td>{% if display_credits is not None %}{{ display_credits }} 學分{% else %}未提供{% endif %}</td>
+          <th scope="row">每週上課</th>
+          <td>{% if display_weekly_hours is not None %}{{ display_weekly_hours }} 小時{% else %}未提供{% endif %}</td>
+        </tr>
+        <tr>
+          <th scope="row">任課老師</th>
+          <td colspan="3">{{ display_teacher_name|default:"未提供" }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="official-syllabus-table-wrap">
+    <table class="official-syllabus-table official-syllabus-content">
+      <colgroup>
+        <col>
+        <col>
+      </colgroup>
+      <thead>
+        <tr><th scope="col">項目</th><th scope="col">內容</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">教學目標</th><td>{{ syllabus.teaching_target|default:"未提供"|linebreaksbr }}</td></tr>
+        <tr><th scope="row">教學內容</th><td>{{ syllabus.teaching_matter|default:"未提供"|linebreaksbr }}</td></tr>
+        {% for week in weekly_rows %}
+        <tr class="official-syllabus-week-row">
+          <th scope="row">{{ week.label }}</th>
+          <td>{{ week.content|default:"未提供"|linebreaksbr }}</td>
+        </tr>
+        {% endfor %}
+        <tr><th scope="row">成績評量</th><td>{{ syllabus.assessment|default:"未提供"|linebreaksbr }}</td></tr>
+        <tr><th scope="row">指定教科書及參考書籍</th><td>{{ syllabus.references|default:"未提供"|linebreaksbr }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+{% endblock %}

@@ -1,12 +1,153 @@
-{% extends "courses/base.html" %}
-{% block title %}登入{% endblock %}
-{% block content %}
-<section class="login-card">
-  <h1>登入</h1>
-  <p class="login-note">這是驗數用的 demo 登入：一鍵登入 demo 學生帳號，不用密碼。</p>
-  <form method="post" class="inline-form">{% csrf_token %}
-    <input type="hidden" name="next" value="{{ request.GET.next|default:'' }}">
-    <button type="submit" class="btn btn-primary login-btn">登入</button>
-  </form>
-</section>
-{% endblock %}
+{% load static %}
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>登入 · NTUB 選課系統</title>
+  <link rel="stylesheet" href="{% static 'courses/login.css' %}?v=watermark-3">
+</head>
+<body class="login-page">
+  <header class="login-navbar">
+    <div class="login-navbar-container">
+      <a class="login-brand" href="{% url 'login' %}">
+        <img class="login-brand-school" src="{% static 'courses/images/ntub-logo_all.png' %}" alt="國立臺北商業大學校徽與校名">
+        <span class="login-brand-divider" aria-hidden="true"></span>
+        <img class="login-brand-system" src="{% static 'courses/images/courses_select_backimg.png' %}" alt="選課系統 Course Selection System">
+      </a>
+    </div>
+  </header>
+
+  <main class="login-main">
+    <section class="login-visual" aria-labelledby="visual-title">
+      <svg viewBox="0 0 540 480" class="login-ambient-svg" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="235" cy="245" r="205" stroke="#7a7267" stroke-width="1.5" stroke-dasharray="8 10" opacity="0.22" />
+        <circle cx="235" cy="245" r="222" stroke="#6b1d4a" stroke-width="1" opacity="0.10" />
+        <g transform="translate(82, 355)" color="#7a7267" opacity="0.20">
+          <circle cx="0" cy="0" r="52" stroke="currentColor" stroke-width="14" stroke-dasharray="16.5 13.9" />
+          <circle cx="0" cy="0" r="42" stroke="currentColor" stroke-width="10" fill="rgba(255,255,255,0.3)" />
+          <line x1="-38" y1="0" x2="38" y2="0" stroke="currentColor" stroke-width="6" />
+          <line x1="-19" y1="-32.9" x2="19" y2="32.9" stroke="currentColor" stroke-width="6" />
+          <line x1="-19" y1="32.9" x2="19" y2="-32.9" stroke="currentColor" stroke-width="6" />
+          <circle cx="0" cy="0" r="15" fill="#eeece7" stroke="currentColor" stroke-width="7" />
+        </g>
+        <g transform="translate(148, 422)" color="#6b1d4a" opacity="0.16">
+          <circle cx="0" cy="0" r="30" stroke="currentColor" stroke-width="9" stroke-dasharray="11.2 9.5" />
+          <circle cx="0" cy="0" r="23" stroke="currentColor" stroke-width="7" fill="rgba(255,255,255,0.25)" />
+          <line x1="-20" y1="0" x2="20" y2="0" stroke="currentColor" stroke-width="4" />
+          <line x1="0" y1="-20" x2="0" y2="20" stroke="currentColor" stroke-width="4" />
+          <circle cx="0" cy="0" r="9" fill="#eeece7" stroke="currentColor" stroke-width="4.5" />
+        </g>
+        <g transform="translate(88, 125)" color="#7a7267" opacity="0.16">
+          <circle cx="0" cy="0" r="26" stroke="currentColor" stroke-width="8" stroke-dasharray="10.2 8.5" />
+          <circle cx="0" cy="0" r="19" stroke="currentColor" stroke-width="6" />
+          <circle cx="0" cy="0" r="7" fill="#ffffff" stroke="currentColor" stroke-width="4" />
+        </g>
+        <circle cx="32" cy="230" r="5" fill="#6b1d4a" opacity="0.18" />
+        <circle cx="52" cy="305" r="3.5" fill="#7a7267" opacity="0.25" />
+      </svg>
+      <div class="login-photo-backdrop" aria-hidden="true">
+        <svg viewBox="0 0 360 370" class="login-watermark-svg" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <g transform="translate(235, 135)" color="#7a7267" opacity="0.22">
+            <circle cx="0" cy="0" r="68" stroke="currentColor" stroke-width="18" stroke-dasharray="19.8 15.8" />
+            <circle cx="0" cy="0" r="56" stroke="currentColor" stroke-width="14" fill="rgba(255,255,255,0.35)" />
+            <line x1="-50" y1="0" x2="50" y2="0" stroke="currentColor" stroke-width="7" />
+            <line x1="-25" y1="-43.3" x2="25" y2="43.3" stroke="currentColor" stroke-width="7" />
+            <line x1="-25" y1="43.3" x2="25" y2="-43.3" stroke="currentColor" stroke-width="7" />
+            <circle cx="0" cy="0" r="20" fill="#e5e2dc" stroke="currentColor" stroke-width="9" />
+          </g>
+          <g transform="translate(272, 268)" color="#6b1d4a" opacity="0.16">
+            <circle cx="0" cy="0" r="42" stroke="currentColor" stroke-width="12" stroke-dasharray="14.5 11.9" />
+            <circle cx="0" cy="0" r="34" stroke="currentColor" stroke-width="10" fill="rgba(255,255,255,0.25)" />
+            <line x1="-30" y1="0" x2="30" y2="0" stroke="currentColor" stroke-width="5" />
+            <line x1="0" y1="-30" x2="0" y2="30" stroke="currentColor" stroke-width="5" />
+            <circle cx="0" cy="0" r="12" fill="#e5e2dc" stroke="currentColor" stroke-width="6" />
+          </g>
+          <circle cx="170" cy="185" r="148" stroke="#7a7267" stroke-width="1.5" stroke-dasharray="6 8" opacity="0.22" />
+        </svg>
+      </div>
+      <div class="login-photo-wrap">
+        <img src="{% static 'courses/images/ntub-campus-alt.webp' %}" alt="國立臺北商業大學校園">
+      </div>
+    </section>
+
+    <section class="login-auth-card" aria-labelledby="login-title">
+      <div class="login-auth-heading">
+        <div>
+          <h1 id="login-title">校園選課入口網站</h1>
+          <p>NTUB Course Selection Portal</p>
+        </div>
+      </div>
+      {% if messages %}
+      <div class="login-messages" role="status">
+        {% for message in messages %}<p>{{ message }}</p>{% endfor %}
+      </div>
+      {% endif %}
+      <p class="login-description">請使用國立臺北商業大學 Google 帳號登入。</p>
+      <a class="google-login-button" href="{% url 'google_login' %}{% if request.GET.next %}?next={{ request.GET.next|urlencode }}{% endif %}">
+        <svg class="google-icon" viewBox="0 0 48 48" aria-hidden="true">
+          <path fill="#4285F4" d="M43.6 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h11a9.4 9.4 0 0 1-4.1 6.2v5.1h6.6c3.9-3.6 6.1-8.8 6.1-15Z"/>
+          <path fill="#34A853" d="M24 44c5.5 0 10.1-1.8 13.5-4.8l-6.6-5.1c-1.8 1.2-4.1 2-6.9 2-5.3 0-9.8-3.6-11.4-8.4H5.8v5.3A20 20 0 0 0 24 44Z"/>
+          <path fill="#FBBC05" d="M12.6 27.7a12 12 0 0 1 0-7.4V15H5.8a20 20 0 0 0 0 18Z"/>
+          <path fill="#EA4335" d="M24 11.9c3 0 5.7 1 7.8 3.1l5.8-5.8C34.1 5.9 29.5 4 24 4A20 20 0 0 0 5.8 15l6.8 5.3c1.6-4.8 6.1-8.4 11.4-8.4Z"/>
+        </svg>
+        <span class="google-login-label">使用 NTUB Google 帳號登入</span>
+      </a>
+    </section>
+  </main>
+
+  <footer class="login-footer">
+    <div class="login-footer-brand">
+      <strong>國立臺北商業大學 · 選課系統</strong>
+      <span>NTUB Course Selection System</span>
+    </div>
+    <span class="login-footer-copyright">© {% now "Y" %} NTUB Course Selection System</span>
+  </footer>
+  <script>
+    (() => {
+      const loginButton = document.querySelector(".google-login-button");
+      if (!loginButton) return;
+
+      const label = loginButton.querySelector(".google-login-label");
+      const defaultLabel = label.textContent;
+      const loadingLabel = "正在連線至 Google...";
+      let isLoading = false;
+
+      const resetLoginButton = () => {
+        isLoading = false;
+        loginButton.classList.remove("is-loading");
+        loginButton.removeAttribute("aria-busy");
+        loginButton.removeAttribute("aria-disabled");
+        label.textContent = defaultLabel;
+      };
+
+      loginButton.addEventListener("click", (event) => {
+        if (
+          isLoading ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey ||
+          event.defaultPrevented
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+        isLoading = true;
+        loginButton.classList.add("is-loading");
+        loginButton.setAttribute("aria-busy", "true");
+        loginButton.setAttribute("aria-disabled", "true");
+        label.textContent = loadingLabel;
+
+        window.setTimeout(() => {
+          window.location.assign(loginButton.href);
+        }, 600);
+      });
+
+      window.addEventListener("pageshow", resetLoginButton);
+    })();
+  </script>
+</body>
+</html>

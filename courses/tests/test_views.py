@@ -42,6 +42,25 @@ class EnrollViewTests(CourseTestCase):
         for name, args in [("course_list", []), ("course_detail", [self.a.course_id]), ("my_schedule", [])]:
             self.assertEqual(self.client.get(reverse(name, args=args)).status_code, 200)
 
+    def test_detail_breadcrumb_preserves_known_list_filters_only(self):
+        response = self.client.get(
+            reverse("course_detail", args=[self.a.course_id]),
+            {"q": "A", "day": "2", "slot": "morning",
+             "next": "https://evil.example/"},
+        )
+        self.assertContains(response, "選課")
+        self.assertNotContains(response, "返回選課清單")
+        self.assertContains(response, 'href="/?q=A&amp;day=2&amp;slot=morning"')
+        self.assertNotContains(response, "evil.example")
+
+    def test_preview_markup_does_not_create_enrollment(self):
+        before = Enrollment.objects.filter(user=self.u).count()
+        response = self.client.get(reverse("course_detail", args=[self.a.course_id]))
+        self.assertContains(response, "預覽加入課表")
+        self.assertContains(response, 'data-start-period="1"')
+        self.assertContains(response, 'data-end-period="2"')
+        self.assertEqual(Enrollment.objects.filter(user=self.u).count(), before)
+
 
 class TeacherRoleTests(CourseTestCase):
     def setUp(self):
@@ -78,16 +97,21 @@ class TeacherRoleTests(CourseTestCase):
         self.assertEqual(self.client.get(reverse("course_roster", args=[self.a.course_id])).status_code, 404)
 
     def test_anonymous_is_redirected_to_login(self):
-        for name, args in [("teaching", []), ("course_roster", [self.a.course_id])]:
+        for name, args in [
+            ("course_list", []),
+            ("course_detail", [self.a.course_id]),
+            ("my_schedule", []),
+            ("teaching", []),
+            ("course_roster", [self.a.course_id]),
+        ]:
             r = self.client.get(reverse(name, args=args))
             self.assertEqual(r.status_code, 302)
-            self.assertIn(reverse("demo_login"), r["Location"])
-        self.assertEqual(self.client.get(reverse("course_list")).status_code, 200)
+            self.assertIn(reverse("login"), r["Location"])
+            self.assertIn("next=", r["Location"])
 
     def test_roster_link_only_for_teacher(self):
         detail = reverse("course_detail", args=[self.a.course_id])
         roster = reverse("course_roster", args=[self.a.course_id])
-        self.assertNotContains(self.client.get(detail), roster)
         self.client.force_login(self.student)
         self.assertNotContains(self.client.get(detail), roster)
         self.client.force_login(self.u)
@@ -100,42 +124,27 @@ class TeacherRoleTests(CourseTestCase):
         self.assertTrue(Course.objects.filter(pk=self.a.pk).exists())
 
 
-class DemoLoginTests(CourseTestCase):
-    def setUp(self):
-        super().setUp()
-        self.demo = get_user_model().objects.create_user("demo", email="demo@example.com")
+class LoginPageTests(CourseTestCase):
+    """登入頁只有 Google 一個入口，沒有 demo 一鍵登入。"""
 
-    def test_get_shows_login_page(self):
-        r = self.client.get(reverse("demo_login"))
+    def test_get_shows_google_login_only(self):
+        r = self.client.get(reverse("login"))
         self.assertEqual(r.status_code, 200)
-        self.assertContains(r, "demo 登入")
-
-    def test_post_logs_in_demo_student(self):
-        r = self.client.post(reverse("demo_login"), follow=True)
-        self.assertEqual(r.context["user"].username, "demo")
-
-    def test_post_honors_internal_next(self):
-        nxt = reverse("my_schedule")
-        r = self.client.post(reverse("demo_login"), {"next": nxt}, follow=True)
-        self.assertEqual(r.request["PATH_INFO"], nxt)
-        self.assertEqual(r.context["user"].username, "demo")
-
-    def test_post_blocks_external_next(self):
-        r = self.client.post(reverse("demo_login"), {"next": "https://evil.example.com/x"}, follow=True)
-        self.assertEqual(r.request["PATH_INFO"], "/")
-        self.assertEqual(r.context["user"].username, "demo")
+        self.assertContains(r, "使用 NTUB Google 帳號登入")
+        self.assertContains(r, "/accounts/google/login/")
+        self.assertNotContains(r, "demo")
 
     def test_get_redirects_when_authenticated(self):
         self.client.force_login(self.u)
-        r = self.client.get(reverse("demo_login"))
+        r = self.client.get(reverse("login"))
         self.assertEqual(r.status_code, 302)
         self.assertEqual(r["Location"], "/")
 
-    def test_post_without_demo_user_stays_anonymous_with_message(self):
-        self.demo.delete()
-        r = self.client.post(reverse("demo_login"), follow=True)
+    def test_post_is_not_a_way_in(self):
+        """登入頁不是表單：POST 不會登入任何人。"""
+        get_user_model().objects.create_user("demo", email="demo@example.com")
+        r = self.client.post(reverse("login"), follow=True)
         self.assertFalse(r.context["user"].is_authenticated)
-        self.assertContains(r, "demo 帳號不存在")
 
 
 class SlotFilterTests(CourseTestCase):
@@ -146,6 +155,7 @@ class SlotFilterTests(CourseTestCase):
         self.mid = self.section("MID1", "A", 5, 6)         # start 5，週一
         self.pm = self.section("PM1", "A", 8, 9, day=3)    # start 8，週三
         self.eve = self.section("EVE1", "A", 11, 12, day=3)  # start 11，週三
+        self.client.force_login(self.u)
 
     def codes(self, **params):
         r = self.client.get(reverse("course_list"), params)

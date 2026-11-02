@@ -1,59 +1,267 @@
 {% extends "courses/base.html" %}
 {% block title %}{{ course.name }}{% endblock %}
 {% block content %}
-<div class="detail-head">
-  <div>
+<nav class="detail-breadcrumb" aria-label="麵包屑">
+  <a href="{{ course_list_url }}">選課</a>
+  <span aria-hidden="true">›</span>
+  <span>{{ course.name }}</span>
+</nav>
+<header class="detail-head">
+  <div class="detail-title-group">
     <h1>{{ course.name }}</h1>
-    <p class="sub">{{ course.code }} · {{ course.teacher }} · <span class="num">{{ course.credits }}</span> 學分{% if my_section %} · 你目前在 <strong>{{ my_section.label_display }}</strong>{% endif %}{% if prereqs %} · 先修：{% for c, done in prereqs %}{{ c.code }}{% if show_prereq_marks %}{% if done %}✓{% else %}<span class="prereq-missing">未修</span>{% endif %}{% endif %}{% if not forloop.last %}、{% endif %}{% endfor %}{% endif %}</p>
+    <div class="detail-tags">
+      <span class="badge badge-code">{{ course.code }}</span>
+      <span class="badge badge-credit">{{ course.credits }} 學分</span>
+      <span class="badge badge-term">{{ course.term.code }}</span>
+      {% if my_section %}<span class="badge badge-enrolled">已加選 {{ my_section.label_display }}</span>{% endif %}
+    </div>
+    {% if prereqs %}<p class="detail-prerequisites">先修：{% for c, done in prereqs %}{{ c.code }}{% if show_prereq_marks %}{% if done %}✓{% else %}<span class="prereq-missing">未修</span>{% endif %}{% endif %}{% if not forloop.last %}、{% endif %}{% endfor %}</p>{% endif %}
   </div>
-  <div class="action">
-    {% if not user.is_authenticated %}
-      <p class="login-hint">登入後才能加選 · <a href="{% url 'demo_login' %}">登入</a></p>
-    {% endif %}
-    {% if user.is_authenticated and is_teacher %}<a class="btn btn-secondary" href="{% url 'course_roster' course.pk %}">選課名單</a>{% endif %}
-  </div>
-</div>
+</header>
 {% if window %}<p class="term-window tw-{{ window.state }}">{{ window.text }}</p>{% endif %}
+<p class="site-disclaimer">本站為模擬選課系統，非 NTUB 正式校務選課紀錄。</p>
 
-<section class="panel">
-  <h2>班別（選一班加選）</h2>
-  <ul class="courses">
-    {% for s in sections %}
-    {% include "courses/_section_row.html" with s=s next=request.path in_course_detail=True %}
-    {% empty %}
-    <li class="empty">這門課還沒開放任何班別。</li>
-    {% endfor %}
-  </ul>
-</section>
+<div class="detail-layout">
+  <main class="detail-main">
+    <section class="panel detail-section-list" id="section-list">
+      <div class="section-heading">
+        <div><h2>上課時間與地點</h2><p class="sub">選擇符合時間的班別後即可加選。</p></div>
+        <span class="badge badge-credit">{{ sections|length }} 個班別</span>
+      </div>
+      <ul class="courses">
+        {% for s in sections %}
+        {% include "courses/_section_row.html" with s=s next=request.path in_course_detail=True %}
+        {% empty %}
+        <li class="empty">這門課還沒開放任何班別。</li>
+        {% endfor %}
+      </ul>
+    </section>
 
-<div class="detail-grid">
-  <section class="syllabus">
-    <h2>課程大綱</h2>
-    <p>{{ course.syllabus|linebreaksbr|default:"尚無大綱。" }}</p>
-  </section>
+    <section class="panel detail-info-section" id="course-info">
+      <h2>基本資訊</h2>
+      <dl class="detail-facts">
+        <dt>課程代碼</dt><dd class="num">{{ course.code }}</dd>
+        <dt>學期</dt><dd>{{ course.term.code }}</dd>
+        <dt>學分</dt><dd>{{ course.credits }} 學分</dd>
+      </dl>
+    </section>
 
-  <aside class="panel facts">
-    <h2>課程資訊</h2>
-    <dl>
-      <dt>學分</dt><dd><span class="num">{{ course.credits }}</span> 學分</dd>
-      <dt>老師</dt><dd>{{ course.teacher }}{% if course.teacher.email %}<br><span class="course-meta">{{ course.teacher.email }}</span>{% endif %}</dd>
+    <section class="panel detail-syllabus" id="course-syllabus">
+      <h2>課程大綱</h2>
+      {% if teaching_syllabus %}
+      <div class="official-syllabus-document course-teaching-syllabus">
+        <h3 class="official-syllabus-title">課程教學大綱</h3>
+        <div class="official-syllabus-table-wrap">
+          <table class="official-syllabus-table official-syllabus-basic" aria-label="課程基本資料">
+            <tbody>
+              <tr>
+                <th scope="row">學年</th>
+                <td>{{ course_term_year|default:"未提供" }}</td>
+                <th scope="row">學期</th>
+                <td>{{ course_term_semester|default:"未提供" }}</td>
+              </tr>
+              <tr>
+                <th scope="row">課程代碼</th>
+                <td>{{ course.code|default:"未提供" }}</td>
+                <th scope="row">科目名稱</th>
+                <td>{{ course.name|default:"未提供" }}</td>
+              </tr>
+              <tr>
+                <th scope="row">學分數</th>
+                <td>{{ course.credits }} 學分</td>
+                <th scope="row">任課老師</th>
+                <td>{{ course.teacher|default:"未提供" }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="official-syllabus-table-wrap">
+          <table class="official-syllabus-table official-syllabus-content">
+            <colgroup><col><col></colgroup>
+            <thead>
+              <tr><th scope="col">項目</th><th scope="col">內容</th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">教學目標</th><td>{{ teaching_syllabus.teaching_target|default:"未提供"|linebreaksbr }}</td></tr>
+              <tr><th scope="row">教學內容</th><td>{{ teaching_syllabus.teaching_matter|default:"未提供"|linebreaksbr }}</td></tr>
+              {% for week in teaching_syllabus_weeks %}
+              <tr><th scope="row">{{ week.label }}</th><td>{{ week.content|default:"未提供"|linebreaksbr }}</td></tr>
+              {% endfor %}
+              <tr><th scope="row">成績評量</th><td>{{ teaching_syllabus.assessment|default:"未提供"|linebreaksbr }}</td></tr>
+              <tr><th scope="row">指定教科書及參考書籍</th><td>{{ teaching_syllabus.references|default:"未提供"|linebreaksbr }}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% elif course.syllabus %}
+      <div class="legacy-course-syllabus">{{ course.syllabus|linebreaksbr }}</div>
+      {% else %}
+      <p>教學大綱尚未公布。</p>
+      {% endif %}
+      {% if official_syllabus %}
+      <h3>官方教學大綱</h3>
+      {% if official_credit_conflicts %}
+      <p class="notice">官方課綱學分與人工核對資料不一致，請由管理員確認（人工核對值優先）。</p>
+      {% endif %}
+      <dl class="detail-facts">
+        <dt>開課班級</dt><dd>{{ official_syllabus.class_code }}</dd>
+        <dt>中文科目名稱</dt><dd>{{ official_syllabus.course_name }}</dd>
+        <dt>英文科目名稱</dt><dd>{{ official_syllabus.course_name_en }}</dd>
+        <dt>課號</dt><dd>{{ official_syllabus.course_code }}</dd>
+        <dt>官方學分</dt><dd>{{ official_syllabus.credits }}</dd>
+        <dt>每週上課時數</dt><dd>{{ official_syllabus.weekly_hours }}</dd>
+        <dt>任課老師</dt><dd>{{ official_syllabus.teacher_name }}</dd>
+      </dl>
+      <h4>教學目標</h4>
+      <p>{{ official_syllabus.teaching_target|linebreaksbr }}</p>
+      <h4>教學內容</h4>
+      <p>{{ official_syllabus.teaching_matter|linebreaksbr }}</p>
+      <h4>每週教學進度</h4>
+      <ol>
+        {% for week, text in official_syllabus.weekly_progress.items %}
+        <li>{{ week }}：{{ text }}</li>
+        {% endfor %}
+      </ol>
+      <h4>成績評量</h4>
+      <p>{{ official_syllabus.assessment|linebreaksbr }}</p>
+      <h4>指定教科書及參考書籍</h4>
+      <p>{{ official_syllabus.references|linebreaksbr }}</p>
+      <a href="{{ official_syllabus.source_url }}">查看官方原始教學大綱</a>
+      {% else %}
+      <p>官方教學大綱尚未同步。</p>
+      {% endif %}
+    </section>
+
+    <section class="panel detail-teacher" id="teacher-info">
+      <h2>教師資訊</h2>
+      <p class="teacher-name">{{ course.teacher }}</p>
+      {% if course.teacher.email %}<a class="teacher-email" href="mailto:{{ course.teacher.email }}">{{ course.teacher.email }}</a>{% else %}<p class="sub">未提供聯絡信箱</p>{% endif %}
+    </section>
+
+    {% if related %}
+    <section class="related">
+      <h2>{{ course.teacher }} 的其他課程</h2>
+      <ul class="courses">
+        {% for c in related %}
+        <li class="course-row">
+          <div class="identity"><a class="course-name" href="{% url 'course_detail' c.pk %}">{{ c.name }}</a><p class="course-meta">{{ c.code }} · {{ c.credits }} 學分</p></div>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+  </main>
+
+  <aside class="panel detail-aside" aria-label="課程選課資訊">
+    <p class="aside-eyebrow">COURSE INFORMATION</p>
+    <h2>選課資訊</h2>
+    <dl class="aside-facts">
+      <dt>學分</dt><dd>{{ course.credits }} 學分</dd>
+      <dt>授課教師</dt><dd>{{ course.teacher }}</dd>
+      <dt>開課班別</dt><dd>{{ sections|length }} 個</dd>
     </dl>
+    {% if not user.is_authenticated %}
+      <p class="login-hint">登入後才能加選課程。</p>
+      <a class="btn btn-primary detail-enroll-link" href="{% url 'login' %}?next={{ request.get_full_path|urlencode }}">登入後加選</a>
+    {% elif sections %}
+      {% with first_section=sections.0 %}
+      <div class="detail-aside-action">{% include "courses/_action.html" with section=first_section action=first_section.action next=request.path wait_position=first_section.wait_position %}</div>
+      {% endwith %}
+    {% endif %}
+    {% if sections %}
+      {% with preview_section=sections.0 %}
+      <button class="btn btn-secondary detail-preview-link" type="button" data-preview-section data-section-name="{{ course.name }} {{ preview_section.label_display }}" data-day="{{ preview_section.day }}" data-start-period="{{ preview_section.start_period }}" data-end-period="{{ preview_section.end_period }}" data-room="{{ preview_section.room|default:'教室未定' }}" data-action="{{ preview_section.action }}" data-time="{{ preview_section.time_display }}">預覽加入課表</button>
+      {% endwith %}
+    {% endif %}
+    {% if is_teacher %}<a class="btn btn-ghost" href="{% url 'course_roster' course.pk %}">查看選課名單</a>{% endif %}
   </aside>
 </div>
 
-{% if related %}
-<section class="related">
-  <h2>{{ course.teacher }} 的其他課程</h2>
-  <ul class="courses">
-    {% for c in related %}
-    <li class="course-row">
-      <div class="identity">
-        <a class="course-name" href="{% url 'course_detail' c.pk %}">{{ c.name }}</a>
-        <p class="course-meta">{{ c.code }} · {{ c.credits }} 學分</p>
-      </div>
-    </li>
-    {% endfor %}
-  </ul>
-</section>
-{% endif %}
+<dialog class="modal preview-dialog" id="section-preview" aria-labelledby="preview-title">
+  <div class="modal-inner">
+    <div class="preview-heading"><div><p class="aside-eyebrow">SCHEDULE PREVIEW</p><h2 class="modal-title" id="preview-title">預覽加入課表</h2></div><button class="icon-btn preview-close" type="button" aria-label="關閉預覽" data-preview-close><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m18 6-12 12M6 6l12 12"/></svg></button></div>
+    <p class="preview-course-name" id="preview-course-name"></p>
+    <div class="preview-grid-wrap"><div class="preview-grid" id="preview-grid" aria-label="週一至週五節次預覽"></div></div>
+    <p class="preview-result" id="preview-result" role="status"></p>
+    <div class="modal-actions"><a class="btn btn-primary" href="#section-list" data-preview-choose>前往班別加選</a><button type="button" class="btn btn-ghost" data-preview-close>關閉</button></div>
+  </div>
+</dialog>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var dialog = document.getElementById("section-preview");
+  var grid = document.getElementById("preview-grid");
+  var result = document.getElementById("preview-result");
+  var courseName = document.getElementById("preview-course-name");
+  if (!dialog || !grid) return;
+  var weekdays = ["週一", "週二", "週三", "週四", "週五"];
+
+  function renderPreview(button) {
+    var day = Number(button.dataset.day);
+    var start = Number(button.dataset.startPeriod);
+    var end = Number(button.dataset.endPeriod);
+    var conflict = button.dataset.action === "blocked_conflict";
+    var periodCount = 13;
+    grid.replaceChildren();
+    var corner = document.createElement("span");
+    corner.className = "preview-corner";
+    corner.textContent = "節次";
+    grid.appendChild(corner);
+    weekdays.forEach(function (weekday) {
+      var head = document.createElement("span");
+      head.className = "preview-day";
+      head.textContent = weekday;
+      grid.appendChild(head);
+    });
+    var scheduleBlock = null;
+    for (var period = 1; period <= periodCount; period += 1) {
+      var label = document.createElement("span");
+      label.className = "preview-period";
+      label.textContent = "第" + period + "節";
+      label.style.gridColumn = "1";
+      label.style.gridRow = String(period + 1);
+      grid.appendChild(label);
+      weekdays.forEach(function (_, index) {
+        var cell = document.createElement("span");
+        cell.className = "preview-cell";
+        cell.setAttribute("aria-hidden", "true");
+        cell.style.gridColumn = String(index + 2);
+        cell.style.gridRow = String(period + 1);
+        grid.appendChild(cell);
+        if (day === index + 1 && period === start) {
+          scheduleBlock = document.createElement("span");
+          scheduleBlock.className = "preview-block" + (conflict ? " preview-block--conflict" : "");
+          scheduleBlock.style.gridColumn = String(index + 2);
+          scheduleBlock.style.gridRow = (period + 1) + " / " + (end + 2);
+          scheduleBlock.textContent = button.dataset.sectionName;
+          scheduleBlock.title = button.dataset.sectionName + " · " + button.dataset.time + " · " + button.dataset.room;
+        }
+      });
+    }
+    if (scheduleBlock) grid.appendChild(scheduleBlock);
+    courseName.textContent = button.dataset.sectionName + " · " + button.dataset.time + " · " + button.dataset.room;
+    result.className = "preview-result" + (conflict ? " is-conflict" : " is-available");
+    if (conflict) {
+      result.textContent = "此班別與已選課程衝堂；目前頁面沒有提供衝堂課名與節次明細。";
+    } else if (button.dataset.action === "enroll") {
+      result.textContent = "此班別目前可加選。";
+    } else {
+      result.textContent = "請查看班別操作狀態後再進行加選。";
+    }
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+  }
+
+  document.querySelectorAll("[data-preview-section]").forEach(function (button) {
+    button.addEventListener("click", function () { renderPreview(button); });
+  });
+  dialog.querySelectorAll("[data-preview-close]").forEach(function (button) {
+    button.addEventListener("click", function () { dialog.close(); });
+  });
+  var choose = dialog.querySelector("[data-preview-choose]");
+  if (choose) choose.addEventListener("click", function () { dialog.close(); });
+})();
+</script>
 {% endblock %}

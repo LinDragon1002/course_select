@@ -1,0 +1,128 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<div class="card">
+  <div class="card-header"><h1>歷史匯入工具：官方課表資料補抓</h1></div>
+  <div class="card-body">
+    {% if error %}<p class="errornote">{{ error }}</p>{% endif %}
+    <p>這是歷史來源追蹤工具。匯入只更新官方來源版本，不會覆蓋系所維護的草稿或已發布固定課表。</p>
+    <form method="post" id="official-sync-form">
+      {% csrf_token %}
+      <div class="row">
+        <div class="col-md-3">{{ form.academic_year.label_tag }}{{ form.academic_year }}</div>
+        <div class="col-md-3">{{ form.semester.label_tag }}{{ form.semester }}</div>
+        <div class="col-md-3">{{ form.program_type.label_tag }}{{ form.program_type }}</div>
+        <div class="col-md-3">{{ form.department.label_tag }}{{ form.department }}</div>
+        <div class="col-md-3">{{ form.grade_no.label_tag }}{{ form.grade_no }}</div>
+        <div class="col-md-9">{{ form.class_group.label_tag }}{{ form.class_group }}</div>
+      </div>
+      {{ form.non_field_errors }}
+      {% for field in form %}
+        {% for error in field.errors %}<div class="errornote">{{ error }}</div>{% endfor %}
+      {% endfor %}
+      <button class="button" name="action" value="preview">預覽官方結果</button>
+      <button class="button" name="action" value="syllabus">補抓教學大綱</button>
+      {% if preview %}
+        <h2>預覽</h2>
+        <p>{{ preview.classes.0.class_name }}（{{ preview.classes.0.class_code }}）</p>
+        <ul>
+        {% for entry in preview.classes.0.entries %}
+          <li>{{ entry.course.code }} {{ entry.course.name }} {{ entry.course.serial }}</li>
+        {% endfor %}
+        </ul>
+        <button class="button default" name="action" value="import">確認匯入</button>
+      {% endif %}
+      {% if syllabus_records %}
+        <h2>教學大綱同步狀態</h2>
+        <ul>
+        {% for record in syllabus_records %}
+          <li>{{ record.class_code }} / {{ record.course_code }}：
+            {{ record.sync_result|default:record.get_status_display }}
+            {% if record.error_message %}（{{ record.error_message }}）{% endif %}
+          </li>
+        {% endfor %}
+        </ul>
+      {% endif %}
+    </form>
+  </div>
+</div>
+{{ class_options|json_script:"official-class-options" }}
+<script>
+(function () {
+  const data = JSON.parse(document.getElementById("official-class-options").textContent);
+  const program = document.getElementById("id_program_type");
+  const department = document.getElementById("id_department");
+  const grade = document.getElementById("id_grade_no");
+  const classGroup = document.getElementById("id_class_group");
+  const initialClass = classGroup.value;
+  const initialDepartment = department.value;
+  const initialGrade = grade.value;
+  const initialProgram = program.value;
+
+  function options(select, values, placeholder) {
+    const current = select.value;
+    select.replaceChildren(new Option(placeholder, ""));
+    values.forEach(function (item) {
+      select.add(new Option(item.label, item.value));
+    });
+    select.value = values.some(function (item) { return String(item.value) === current; })
+      ? current : "";
+  }
+  function rebuild(clearChildren) {
+    const programId = program.value;
+    const departmentId = department.value;
+    const gradeNo = grade.value;
+    const departments = Array.from(new Map(data.filter(function (item) {
+      return !programId || String(item.program_type_id) === programId;
+    }).map(function (item) {
+      return [item.department_id, {value: item.department_id, label: item.department_label}];
+    })).values());
+    if (!programId) {
+      department.disabled = true;
+      grade.disabled = true;
+      classGroup.disabled = true;
+      options(department, [], "請先選擇學制");
+      options(grade, [], "請先選擇系所");
+      options(classGroup, [], "請先選擇年級");
+      return;
+    }
+    department.disabled = false;
+    options(department, departments, "請選擇系所");
+    if (!department.value) {
+      grade.disabled = true;
+      classGroup.disabled = true;
+      options(grade, [], "請先選擇系所");
+      options(classGroup, [], "請先選擇年級");
+      return;
+    }
+    const filtered = data.filter(function (item) {
+      return String(item.program_type_id) === programId &&
+        String(item.department_id) === department.value;
+    });
+    const grades = Array.from(new Set(filtered.map(function (item) { return String(item.grade_no); })))
+      .sort(function (a, b) { return Number(a) - Number(b); })
+      .map(function (value) { return {value: value, label: value + " 年級"}; });
+    grade.disabled = false;
+    options(grade, grades, "請選擇年級");
+    if (!grade.value) {
+      classGroup.disabled = true;
+      options(classGroup, [], "請先選擇年級");
+      return;
+    }
+    const classes = filtered.filter(function (item) {
+      return String(item.grade_no) === grade.value;
+    }).map(function (item) { return {value: item.value, label: item.label}; });
+    classGroup.disabled = false;
+    options(classGroup, classes, "請選擇班級");
+  }
+  program.addEventListener("change", function () { department.value = ""; grade.value = ""; classGroup.value = ""; rebuild(true); });
+  department.addEventListener("change", function () { grade.value = ""; classGroup.value = ""; rebuild(true); });
+  grade.addEventListener("change", function () { classGroup.value = ""; rebuild(false); });
+  rebuild(false);
+  if (initialProgram) program.value = initialProgram;
+  if (initialDepartment) department.value = initialDepartment;
+  if (initialGrade) grade.value = initialGrade;
+  if (initialClass) classGroup.value = initialClass;
+  rebuild(false);
+})();
+</script>
+{% endblock %}

@@ -1,32 +1,37 @@
 {# 班別列按鈕：需要 section、action、next(可選)、wait_position(action=cancel_wait 時) #}
 {# action 由 verdict.evaluate 產生；顯示什麼，POST 就回什麼 #}
 {% if action == "drop" %}
-  <form method="post" action="{% url 'drop' section.pk %}" class="inline-form">{% csrf_token %}
+  <form method="post" action="{% url 'drop' section.pk %}" class="inline-form" data-confirm="確定要退選「{{ section.course.name }}」{{ section.label_display }}嗎？此操作無法復原。" data-confirm-title="確認退選" data-confirm-ok="確定退選">{% csrf_token %}
     <input type="hidden" name="next" value="{{ next }}">
-    <button class="btn btn-secondary">退選</button></form>
+    <button class="btn btn-ghost btn-danger" type="submit">退選</button></form>
 {% elif action == "cancel_wait" %}
   <span class="wait-flag">等待中（第 {{ wait_position }} 位）</span>
   <form method="post" action="{% url 'cancel_wait' section.pk %}" class="inline-form">{% csrf_token %}
     <input type="hidden" name="next" value="{{ next }}">
-    <button class="btn btn-secondary">取消等待</button></form>
+    <button class="btn btn-ghost" type="submit">取消等待</button></form>
 {% elif action == "enroll" %}
   <form method="post" action="{% url 'enroll' section.pk %}" class="inline-form">{% csrf_token %}
     <input type="hidden" name="next" value="{{ next }}">
-    <button class="btn btn-secondary">加選</button></form>
+    <button class="btn btn-primary" type="submit">加選</button></form>
 {% elif action == "waitlist" %}
   <form method="post" action="{% url 'enroll' section.pk %}" class="inline-form">{% csrf_token %}
     <input type="hidden" name="next" value="{{ next }}">
-    <button class="btn btn-secondary">加入等待</button></form>
+    <button class="btn btn-secondary" type="submit">加入等待</button></form>
 {% elif action == "blocked_not_open" %}
-  <button class="btn btn-secondary" disabled>未開放</button>
+  <button class="btn btn-secondary" type="button" disabled>未開放</button>
 {% elif action == "blocked_closed" %}
-  <button class="btn btn-secondary" disabled>已截止</button>
+  <button class="btn btn-secondary" type="button" disabled>已截止</button>
 {% elif action == "blocked_prereq" %}
-  <button class="btn btn-secondary" disabled>缺先修</button>
+  <button class="btn btn-secondary" type="button" disabled>缺先修</button>
 {% elif action == "blocked_conflict" %}
-  <button class="btn btn-secondary" disabled>衝堂</button>
+  <span class="badge badge-conflict">衝堂</span>
+  <button class="btn btn-secondary" type="button" disabled>衝堂</button>
 {% elif action == "blocked_credits" %}
-  <button class="btn btn-secondary" disabled>超學分</button>
+  <button class="btn btn-secondary" type="button" disabled>超學分</button>
 {% elif action == "blocked_same_course" %}
-  <button class="btn btn-secondary" disabled>已選此課</button>
+  <button class="btn btn-enrolled" type="button" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>已選此課</button>
+{% elif action == "blocked_required" %}
+  <button class="btn btn-secondary" type="button" disabled>本班必修</button>
+{% elif action == "blocked_policy" %}
+  <button class="btn btn-secondary" type="button" disabled>未開放加選</button>
 {% endif %}

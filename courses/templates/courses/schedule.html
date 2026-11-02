@@ -1,55 +1,182 @@
 {% extends "courses/base.html" %}
 {% block title %}我的課表{% endblock %}
+{% block body_class %}schedule-page{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    <h1>我的課表</h1>
-    <p class="sub"><span class="num">{{ total }}</span> / <span class="num">{{ max }}</span> 學分 · <span class="num">{{ mine|length }}</span> 門課</p>
+<header class="schedule-page-head">
+  <div class="schedule-heading">
+    <h1>我的課表{% if profile %}<span class="schedule-class-badge">{{ profile.class_group.name_zh }}（{{ profile.class_group.code }}）</span>{% endif %}</h1>
+    <p class="schedule-term">{% if term %}{{ term.code }} 學期{% endif %}</p>
+  </div>
+</header>
+
+<section class="schedule-credit-summary" aria-label="本學期學分摘要">
+  <div class="schedule-credit-card">
+    <span class="summary-label">本學期已選學分</span>
+    <strong class="summary-value">{% if credit_summary.complete %}{{ total|floatformat:"-2" }}{% else %}待確認{% endif %}{% if max is not None %} / {{ max|floatformat:"-2" }}{% endif %} 學分</strong>
+    <span class="schedule-credit-detail">官方配課 {{ credit_summary.official_confirmed|floatformat:"-2" }} + 自行加選 {{ credit_summary.enrolled|floatformat:"-2" }}</span>
+  </div>
+  <div class="schedule-credit-card">
+    <span class="summary-label">學分上下限</span>
+    <strong class="summary-value">{% if min is not None %}{{ min }}～{{ max }}{% else %}待確認{% endif %}</strong>
+    <span class="schedule-credit-detail">{% if min is not None %}最低 {{ min }}、最高 {{ max }} 學分{% else %}學分規則待確認{% endif %}</span>
+  </div>
+  <div class="schedule-credit-card">
+    <span class="summary-label">尚可加選學分</span>
+    <strong class="summary-value">{% if available_credits is not None %}{{ available_credits|floatformat:"-2" }} 學分{% else %}待確認{% endif %}</strong>
+    <span class="schedule-credit-detail">{% if minimum_gap %}距離最低要求尚差 {{ minimum_gap|floatformat:"-2" }} 學分{% elif min is not None %}已達最低學分{% else %}學分規則待確認{% endif %}</span>
+  </div>
+  {% if max is not None %}<span class="summary-credit-track" role="progressbar" aria-label="本學期已選學分使用率" aria-valuemin="0" aria-valuemax="{{ max }}" aria-valuenow="{{ total }}"><span style="width:{% if total >= max %}100{% else %}{% widthratio total max 100 %}{% endif %}%"></span></span>{% endif %}
+  <span class="schedule-credit-count">自行加選 {{ mine|length }} 門</span>
+  {% if not credit_summary.complete %}
+  <p class="schedule-source schedule-source--empty">學分尚未完整核對：{{ credit_summary.pending_course_codes|join:"、" }}。</p>
+  {% endif %}
+</section>
+
+{% if snapshot %}
+<div class="schedule-legend-row">
+  <div class="wk-legend" aria-label="課程類型圖例">
+    <span class="wk-key wk-key--official">班級固定課程</span>
+    <span class="wk-key wk-key--activity">班級活動</span>
+    <span class="wk-key wk-key--enrolled">個人加選</span>
+    <span class="wk-key wk-key--merged">固定課程＋自主加選</span>
+  </div>
+  <span class="schedule-official-note">班級固定課表 · {{ snapshot.term.code }} · {{ official_courses_count }} 門課程{% if snapshot.source_kind == "IMPORTED" %}（歷史匯入資料）{% else %}（系所維護發布）{% endif %}</span>
+  <details class="schedule-info-tip"><summary aria-label="固定課程學分說明"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg></summary><span>班級固定課程不會建立 Enrollment，也不改變自主選課與候補名額；官方活動只作為時間框架。</span></details>
+</div>
+{% elif profile %}
+<p class="schedule-source schedule-source--empty">
+  目前學期（{{ term.code|default:"未設定" }}）尚無已發布的班級固定課表，下方只顯示你自己加選的課程。
+</p>
+{% else %}
+<p class="schedule-source schedule-source--empty">
+  尚未設定學籍，因此沒有班級固定課表；下方只顯示你自己加選的課程。
+</p>
+{% endif %}
+
+{% if grid.has_conflict %}
+<p class="schedule-conflict" role="status">
+  有 <span class="num">{{ grid.conflict_count }}</span> 個時段互相重疊（已標示「衝突」），請確認時間是否打架。
+</p>
+{% endif %}
+
+{% if grid.items %}
+<div class="week-wrap">
+  <div class="week-grid" style="--periods: {{ grid.periods }}">
+    <div class="wk-head" role="row">
+      <div class="wk-corner" role="columnheader"><span aria-hidden="true">節</span><span class="sr-only">節次</span></div>
+      {% for day_no, day_label in grid.days %}
+      <div class="wk-dayhead" role="columnheader" data-day="{{ day_no }}">{{ day_label }}</div>
+      {% endfor %}
+    </div>
+    <div class="wk-body">
+      <div class="wk-times" role="rowheader" style="grid-column: 1; grid-row: 1 / -1;">
+        {% for p in grid.period_labels %}
+        <div class="wk-time"><span>{{ p }}</span></div>
+        {% endfor %}
+      </div>
+      {% for day_no, day_label, day_items in grid.day_columns %}
+      <div class="wk-col{% if day_no >= 6 and not day_items %} wk-col--empty-weekend{% endif %}" role="gridcell" data-day="{{ day_no }}" style="grid-column: {{ day_no|add:"1" }};">
+        {% for item in day_items %}
+        <div class="wk-slot wk-slot--{{ item.kind }}{% if item.conflict %} wk-slot--conflict{% endif %}"
+             style="--top: {{ item.row_offset }}; --span: {{ item.span }}; --left: {{ item.left_pct }}%; --width: {{ item.width_pct }}%;"
+             role="gridcell"
+             title="{{ item.kind_label }} · {{ item.title }} · {{ item.subtitle }} · {{ day_label }}第{{ item.start_period }}至{{ item.end_period }}節 · {{ item.meta }}"
+             aria-label="{{ item.kind_label }}：{{ item.title }}，{{ day_label }}第{{ item.start_period }}至{{ item.end_period }}節{% if item.conflict %}，時間衝突{% endif %}">
+          {% if item.url %}
+          <a class="wk-slot-link" href="{{ item.url }}">
+            <span class="wk-slot-name">{{ item.title }}</span>
+            {% if item.meta %}<span class="wk-slot-room" data-slot-kind="{{ item.kind }}">{{ item.meta }}</span>{% endif %}
+          </a>
+          {% else %}
+          <span class="wk-slot-link">
+            <span class="wk-slot-name">{{ item.title }}</span>
+            {% if item.meta %}<span class="wk-slot-room" data-slot-kind="{{ item.kind }}">{{ item.meta }}</span>{% endif %}
+          </span>
+          {% endif %}
+          {% if item.conflict %}<span class="wk-slot-warn">衝突</span>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
   </div>
 </div>
-
-<div class="panel week-wrap">
-  <table class="week" aria-label="週課表">
-    <thead>
-      <tr><th scope="col"><span aria-hidden="true">節</span><span class="sr-only">節次</span></th>{% for d in days %}<th scope="col">{{ d }}</th>{% endfor %}</tr>
-    </thead>
-    <tbody>
-      {% for p, cells in rows %}
-      <tr>
-        <th scope="row">{{ p }}</th>
-        {% for c in cells %}
-          {% if c %}
-            {% if c.start_period == p %}
-            <td rowspan="{{ c.periods }}"><a class="slot" href="{% url 'course_detail' c.course.pk %}">
-              <span class="slot-name">{{ c.course.name }} {{ c.label_display }}</span>
-              <span class="slot-meta">{{ c.room|default:"教室未定" }} · {{ c.course.teacher }}</span>
-            </a></td>
-            {% endif %}
-          {% else %}
-            <td></td>
-          {% endif %}
-        {% endfor %}
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
 <p class="scroll-hint">左右滑動看完整一週。</p>
+{% else %}
+{% url 'course_list' as enroll_url %}
+{% include "courses/_empty.html" with title="目前課表是空的" text="班級固定課程與你加選的課程都會出現在這裡。" action_url=enroll_url action_label="前往選課" %}
+{% endif %}
+
+{% if snapshot %}
+<section class="mine">
+  <div class="mine-head">
+    <h2>班級固定課程</h2>
+    <span class="num">{{ official_courses_count }} 門</span>
+  </div>
+  <ul class="courses">
+    {% for row in official_course_rows %}
+    <li class="schedule-course-row schedule-course-row--official">
+      <a class="schedule-course-name" href="{{ row.url }}">{{ row.name }}</a>
+      <span>{{ row.teacher|default:"教師未定" }}</span>
+      <span>{{ row.classroom|default:"教室未定" }}</span>
+      <span>{{ row.weekday_label }} 第{{ row.start_period }}-{{ row.end_period }}節</span>
+      <span>固定課程 · {% if row.credits is not None %}{{ row.credits }} 學分{% else %}學分待確認{% endif %}</span>
+    </li>
+    {% empty %}
+    <li class="empty">這個班級在 {{ snapshot.term.code }} 學期沒有固定課程資料。</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
 
 <section class="mine">
   <div class="mine-head"><h2>已選課程</h2><span class="num">{{ mine|length }} 門</span></div>
   <ul class="courses">
     {% for s in mine %}
-    <li class="course-row">
-      <div class="identity">
-        <a class="course-name" href="{% url 'course_detail' s.course.pk %}">{{ s.course.name }}</a>
-        <p class="course-meta">{{ s.course.code }} · {{ s.course.teacher }} · {{ s.label_display }} · {{ s.time_display }} · {{ s.room|default:"教室未定" }} · {{ s.course.credits }} 學分</p>
-      </div>
+    <li class="schedule-course-row">
+      <a class="schedule-course-name" href="{% url 'course_detail' s.course.pk %}">{{ s.course.name }}</a>
+      <span>{{ s.course.teacher }}</span>
+      <span>{{ s.room|default:"教室未定" }}</span>
+      <span>{{ s.time_display }}</span>
+      <span>{{ s.course.credits }} 學分</span>
       <div class="action">{% include "courses/_action.html" with section=s action=s.action next=request.path %}</div>
     </li>
     {% empty %}
-    <li class="empty">還沒有選課，去 <a href="{% url 'course_list' %}">搜尋課程</a> 看看吧。</li>
+    <li>{% url 'course_list' as enroll_url %}{% include "courses/_empty.html" with title="還沒有加選課程" text="班級固定課程會顯示在上方週課表；自主加選的課會列在這裡。" action_url=enroll_url action_label="前往選課" %}
     {% endfor %}
   </ul>
 </section>
+<button class="back-to-top" id="back-to-top" type="button" aria-label="回到最上方" title="回到最上方" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg></button>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var weekday = new Date().getDay() || 7;
+  if (weekday >= 1 && weekday <= 7) {
+    document.querySelectorAll("[data-day]").forEach(function (item) {
+      if (Number(item.dataset.day) === weekday) item.classList.add("is-today");
+    });
+  }
+  document.querySelectorAll(".wk-slot-room").forEach(function (room) {
+    var kind = room.dataset.slotKind;
+    var value = room.textContent.trim();
+    if (kind === "enrollment") value = value.split(" · ")[0];
+    if (kind === "official_enrollment") {
+      var localInfo = value.split(" · 本站 ")[1] || "";
+      value = localInfo.lastIndexOf(" ") > 0 ? localInfo.slice(0, localInfo.lastIndexOf(" ")) : "";
+    }
+    room.textContent = value;
+    if (!value) room.remove();
+  });
+  var backToTop = document.getElementById("back-to-top");
+  if (!backToTop) return;
+  function updateBackToTop() { backToTop.hidden = window.scrollY < 120; }
+  window.addEventListener("scroll", updateBackToTop, { passive: true });
+  updateBackToTop();
+  backToTop.addEventListener("click", function () {
+    window.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  });
+})();
+</script>
 {% endblock %}

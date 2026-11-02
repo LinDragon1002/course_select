@@ -1,0 +1,171 @@
+{% extends "admin/change_form.html" %}
+
+{% block extrabody %}
+  {{ block.super }}
+  <script>
+    (() => {
+      const source = document.getElementById("id_departments");
+      const catalogInput = document.getElementById("id_department_catalog");
+      if (!source || !catalogInput) return;
+
+      let catalog;
+      try {
+        catalog = JSON.parse(catalogInput.value || "[]");
+      } catch (error) {
+        console.error("無法讀取系所授權資料", error);
+        return;
+      }
+
+      const selected = new Set(Array.from(source.selectedOptions).map(option => option.value));
+      const programs = new Map(catalog.map(department => [
+        String(department.program_id),
+        {id: String(department.program_id), code: department.program_code, name: department.program_name}
+      ]));
+      const wrapper = document.createElement("div");
+      wrapper.className = "card shadow-sm mb-3";
+      wrapper.innerHTML = `
+        <div class="card-header"><strong>授權系所選擇</strong></div>
+        <div class="card-body">
+          <p class="text-body-secondary small mb-3">
+            學制、年級與班級僅用於定位系所；實際授權單位仍是整個 AcademicDepartment。
+          </p>
+          <div class="row g-3">
+            <div class="col-12 col-md-3"><label class="form-label" for="scope-program">學制</label>
+              <select id="scope-program" class="form-select"><option value="">全部學制</option></select></div>
+            <div class="col-12 col-md-3"><label class="form-label" for="scope-department">系所</label>
+              <select id="scope-department" class="form-select"><option value="">全部系所</option></select></div>
+            <div class="col-12 col-md-3"><label class="form-label" for="scope-grade">年級</label>
+              <select id="scope-grade" class="form-select"><option value="">全部年級</option></select></div>
+            <div class="col-12 col-md-3"><label class="form-label" for="scope-class">班級</label>
+              <select id="scope-class" class="form-select"><option value="">全部班級</option></select></div>
+          </div>
+          <div class="input-group mt-3">
+            <span class="input-group-text">搜尋</span>
+            <input id="scope-search" class="form-control" type="search" placeholder="系所名稱或代碼">
+          </div>
+          <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
+            <button type="button" class="btn btn-outline-primary btn-sm" id="scope-select-visible">勾選目前結果</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="scope-clear-visible">取消勾選目前結果</button>
+            <span class="badge text-bg-primary" id="scope-count">已選 0 個系所</span>
+          </div>
+          <div class="row g-3 mt-1">
+            <div class="col-12 col-lg-7">
+              <h3 class="h6">搜尋結果</h3>
+              <div id="scope-results" class="list-group border rounded"></div>
+            </div>
+            <div class="col-12 col-lg-5">
+              <h3 class="h6">已選取系所</h3>
+              <div id="scope-selected" class="list-group border rounded"></div>
+            </div>
+          </div>
+        </div>`;
+      source.closest(".form-row, .form-group, .field-departments")?.prepend(wrapper);
+      source.classList.add("d-none");
+      catalogInput.closest(".form-row, .form-group")?.classList.add("d-none");
+      const program = wrapper.querySelector("#scope-program");
+      const department = wrapper.querySelector("#scope-department");
+      const grade = wrapper.querySelector("#scope-grade");
+      const classSelect = wrapper.querySelector("#scope-class");
+      const search = wrapper.querySelector("#scope-search");
+      const results = wrapper.querySelector("#scope-results");
+      const selectedList = wrapper.querySelector("#scope-selected");
+      const count = wrapper.querySelector("#scope-count");
+
+      const addOption = (select, value, label) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        select.append(option);
+      };
+      programs.forEach(item => addOption(program, item.id, `${item.code} ${item.name}`));
+
+      const resetSelect = (select, label) => {
+        select.replaceChildren();
+        addOption(select, "", label);
+      };
+      const currentDepartments = () => {
+        const programId = program.value;
+        const departmentId = department.value;
+        const gradeNo = grade.value;
+        const classId = classSelect.value;
+        return catalog.filter(item =>
+          (!programId || String(item.program_id) === programId) &&
+          (!departmentId || String(item.id) === departmentId) &&
+          (!gradeNo || item.classes.some(group => String(group.grade) === gradeNo)) &&
+          (!classId || item.classes.some(group => String(group.id) === classId))
+        );
+      };
+      const syncFilters = () => {
+        const programId = program.value;
+        const programDepartments = catalog.filter(item => !programId || String(item.program_id) === programId);
+        const oldDepartment = department.value;
+        resetSelect(department, "全部系所");
+        programDepartments.forEach(item => addOption(department, String(item.id), `${item.code} ${item.name}`));
+        department.value = programDepartments.some(item => String(item.id) === oldDepartment) ? oldDepartment : "";
+        const selectedDepartments = programDepartments.filter(item => !department.value || String(item.id) === department.value);
+        const grades = [...new Set(selectedDepartments.flatMap(item => item.classes.map(group => group.grade)).filter(value => value !== null))].sort();
+        const oldGrade = grade.value;
+        resetSelect(grade, "全部年級");
+        grades.forEach(value => addOption(grade, String(value), `${value} 年級`));
+        grade.value = grades.map(String).includes(oldGrade) ? oldGrade : "";
+        const classes = selectedDepartments.flatMap(item => item.classes).filter(group =>
+          !grade.value || String(group.grade) === grade.value);
+        const oldClass = classSelect.value;
+        resetSelect(classSelect, "全部班級");
+        classes.forEach(group => addOption(classSelect, String(group.id), `${group.name}（${group.code}）`));
+        classSelect.value = classes.some(group => String(group.id) === oldClass) ? oldClass : "";
+        renderResults();
+      };
+      const renderResults = () => {
+        const query = search.value.trim().toLowerCase();
+        results.replaceChildren();
+        currentDepartments().filter(item =>
+          !query || `${item.code} ${item.name}`.toLowerCase().includes(query)
+        ).forEach(item => {
+          const label = document.createElement("label");
+          label.className = "list-group-item d-flex gap-2 align-items-start";
+          label.innerHTML = `<input class="form-check-input mt-1" type="checkbox" value="${item.id}">
+            <span><strong>${item.code} ${item.name}</strong><small class="d-block text-body-secondary">${item.program_code} ${item.program_name}</small></span>`;
+          const checkbox = label.querySelector("input");
+          checkbox.checked = selected.has(String(item.id));
+          checkbox.addEventListener("change", () => {
+            checkbox.checked ? selected.add(String(item.id)) : selected.delete(String(item.id));
+            syncSelected();
+          });
+          results.append(label);
+        });
+        syncSelected();
+      };
+      const syncSelected = () => {
+        source.querySelectorAll("option").forEach(option => option.selected = selected.has(option.value));
+        selectedList.replaceChildren();
+        catalog.filter(item => selected.has(String(item.id))).forEach(item => {
+          const row = document.createElement("div");
+          row.className = "list-group-item d-flex justify-content-between align-items-center";
+          row.innerHTML = `<span>${item.code} ${item.name}</span><button type="button" class="btn btn-sm btn-outline-danger">移除</button>`;
+          row.querySelector("button").addEventListener("click", () => {
+            selected.delete(String(item.id));
+            renderResults();
+          });
+          selectedList.append(row);
+        });
+        count.textContent = `已選 ${selected.size} 個系所`;
+      };
+      [program, department, grade, classSelect].forEach(select => select.addEventListener("change", syncFilters));
+      search.addEventListener("input", renderResults);
+      wrapper.querySelector("#scope-select-visible").addEventListener("click", () => {
+        currentDepartments().filter(item =>
+          !search.value.trim() || `${item.code} ${item.name}`.toLowerCase().includes(search.value.trim().toLowerCase())
+        ).forEach(item => selected.add(String(item.id)));
+        renderResults();
+      });
+      wrapper.querySelector("#scope-clear-visible").addEventListener("click", () => {
+        currentDepartments().filter(item =>
+          !search.value.trim() || `${item.code} ${item.name}`.toLowerCase().includes(search.value.trim().toLowerCase())
+        ).forEach(item => selected.delete(String(item.id)));
+        renderResults();
+      });
+      syncFilters();
+    })();
+  </script>
+{% endblock %}

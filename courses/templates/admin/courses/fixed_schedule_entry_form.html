@@ -1,0 +1,25 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">首頁</a> ›
+  <a href="{% url 'admin:courses_ntubtimetablesnapshot_fixed_schedule' %}">班級固定課表</a> ›
+  <a href="{% url 'admin:courses_ntubtimetablesnapshot_fixed_schedule_detail' class_group.pk term.pk %}">{{ class_group.name_zh|default:class_group.code }}</a> ›
+  {{ title }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>{{ title }}</h1>
+  <p>{{ class_group.name_zh|default:class_group.code }} · {{ term.code }} 學期（草稿）</p>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <div class="submit-row">
+      <button type="submit" class="default">儲存草稿</button>
+      <a class="button" href="{% url 'admin:courses_ntubtimetablesnapshot_fixed_schedule_detail' class_group.pk term.pk %}">取消</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,107 @@
+{% extends "admin/base.html" %}
+{% load i18n %}
+
+{% block title %}管理總覽 | {{ site_title|default:"NTUB 課程管理" }}{% endblock %}
+
+{% block breadcrumbs %}
+<ol class="breadcrumb mb-0">
+  <li class="breadcrumb-item active">管理總覽</li>
+</ol>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+  <div>
+    <h1 class="mb-1">管理總覽</h1>
+    <p class="text-body-secondary mb-0">
+      {% if dashboard_term %}目前學期：{{ dashboard_term.code }}{% else %}尚未設定目前學期{% endif %}
+    </p>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-12 col-sm-6 col-xl-3">
+    <div class="card h-100 shadow-sm border-0">
+      <div class="card-body">
+        <div class="text-body-secondary small">課程總數</div>
+        <div class="fs-2 fw-semibold">{{ dashboard_stats.course_count }}</div>
+        <i class="bi bi-book text-primary fs-4"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-sm-6 col-xl-3">
+    <div class="card h-100 shadow-sm border-0">
+      <div class="card-body">
+        <div class="text-body-secondary small">開課班別總數</div>
+        <div class="fs-2 fw-semibold">{{ dashboard_stats.section_count }}</div>
+        <i class="bi bi-columns-gap text-success fs-4"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-sm-6 col-xl-3">
+    <div class="card h-100 shadow-sm border-0">
+      <div class="card-body">
+        <div class="text-body-secondary small">修課政策</div>
+        <div class="fs-2 fw-semibold">{{ dashboard_stats.published_policy_count }}</div>
+        <span class="badge text-bg-success">已發布</span>
+        <span class="badge text-bg-warning">{{ dashboard_stats.draft_policy_count }} 草稿</span>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-sm-6 col-xl-3">
+    <div class="card h-100 shadow-sm border-0">
+      <div class="card-body">
+        <div class="text-body-secondary small">待核對官方課程</div>
+        <div class="fs-2 fw-semibold">{{ dashboard_stats.pending_credit_count }}</div>
+        <span class="badge {% if dashboard_stats.pending_credit_count %}text-bg-danger{% else %}text-bg-success{% endif %}">
+          {% if dashboard_stats.pending_credit_count %}需要處理{% else %}已完成{% endif %}
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-12 col-xl-7">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>最近需要處理的草稿政策</strong>
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'admin:courses_sectionclasspolicy_changelist' %}?status__exact=DRAFT">查看全部</a>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead><tr><th>課程</th><th>適用班級</th><th>分類</th><th>狀態</th></tr></thead>
+          <tbody>
+          {% for policy in dashboard_draft_policies %}
+            <tr>
+              <td>{{ policy.section.course.code }} {{ policy.section.course.name }}</td>
+              <td>{{ policy.class_group.name_zh }}（{{ policy.class_group.code }}）</td>
+              <td>{{ policy.get_course_category_display }}</td>
+              <td><span class="badge text-bg-warning">草稿</span></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="text-body-secondary">目前沒有待處理草稿政策。</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-xl-5">
+    <div class="card shadow-sm h-100">
+      <div class="card-header"><strong>課程規劃快速操作</strong></div>
+      <div class="card-body">
+        <div class="d-grid gap-2">
+          {% for action in dashboard_actions %}
+          <a class="btn btn-primary text-start" href="{{ action.url }}">
+            <i class="{{ action.icon }} me-2"></i>{{ action.label }}
+          </a>
+          {% empty %}
+          <p class="text-body-secondary mb-0">目前沒有可用的課程規劃操作。</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

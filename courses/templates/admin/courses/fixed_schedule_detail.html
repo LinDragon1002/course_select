@@ -1,0 +1,122 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">首頁</a> ›
+  <a href="{% url 'admin:courses_ntubtimetablesnapshot_fixed_schedule' %}">班級固定課表</a> ›
+  {{ class_group.name_zh|default:class_group.code }} · {{ term.code }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>{{ class_group.name_zh|default:class_group.code }}（{{ class_group.code }}）固定課表</h1>
+  <p>{{ class_group.department.name_zh }} · {{ term.code }} 學期</p>
+
+  {% if draft %}
+    <p class="messagelist"><strong>草稿版本</strong> 尚未對學生發布；學生仍查看目前已發布版本。</p>
+    <p>
+      <a class="button" href="{% url 'admin:courses_ntubtimetablesnapshot_fixed_schedule_entry_add' class_group.pk term.pk %}">新增固定課程</a>
+    </p>
+    <form method="post" action="{% url 'admin:courses_ntubtimetablesnapshot_fixed_schedule_publish' class_group.pk term.pk %}">
+      {% csrf_token %}
+      <button type="submit" class="default">確認並發布此版本</button>
+    </form>
+  {% elif published %}
+    <p><strong>目前版本：已發布</strong>{% if published.published_at %} · {{ published.published_at|date:"Y-m-d H:i" }}{% endif %}</p>
+    <form method="post" action="{% url 'admin:courses_ntubtimetablesnapshot_fixed_schedule_takeover' class_group.pk term.pk %}">
+      {% csrf_token %}
+      <button type="submit" class="default">建立新修訂草稿</button>
+    </form>
+    <form method="post" action="{% url 'admin:courses_ntubtimetablesnapshot_fixed_schedule_withdraw' published.pk %}">
+      {% csrf_token %}
+      <button type="submit">撤回發布</button>
+      <span class="help">撤回後學生課表不會自動回退到歷史官方匯入資料。</span>
+    </form>
+  {% elif imported %}
+    <p><strong>目前版本：沿用歷史官方匯入資料</strong>。接管後會複製到草稿，原始匯入資料不會被修改。</p>
+    <form method="post" action="{% url 'admin:courses_ntubtimetablesnapshot_fixed_schedule_takeover' class_group.pk term.pk %}">
+      {% csrf_token %}
+      <button type="submit" class="default">接管並建立草稿</button>
+    </form>
+  {% else %}
+    <p>此班級學期目前沒有固定課表；建立草稿後新增課程並發布。</p>
+    <form method="post" action="{% url 'admin:courses_ntubtimetablesnapshot_fixed_schedule_takeover' class_group.pk term.pk %}">
+      {% csrf_token %}
+      <button type="submit" class="default">建立固定課表草稿</button>
+    </form>
+  {% endif %}
+
+  {% if current %}
+    <h2>{% if draft %}草稿明細{% elif published %}已發布明細{% else %}歷史匯入明細{% endif %}</h2>
+    <div class="fixed-schedule-grid-wrap">
+      <div class="fixed-schedule-grid" style="--periods: {{ weekly_grid.periods }}">
+        <div class="fixed-schedule-grid__head">
+          <div class="fixed-schedule-grid__corner">節次</div>
+          {% for day_no, day_label in weekly_grid.days %}
+            <div class="fixed-schedule-grid__day">{{ day_label }}</div>
+          {% endfor %}
+        </div>
+        <div class="fixed-schedule-grid__body">
+          <div class="fixed-schedule-grid__times" style="grid-row: 1 / -1">
+            {% for period in weekly_grid.period_labels %}
+              <div>{{ period }}</div>
+            {% endfor %}
+          </div>
+          {% for day_no, day_label, day_items in weekly_grid.day_columns %}
+            <div class="fixed-schedule-grid__column" style="grid-column: {{ day_no|add:'1' }}">
+              {% for item in day_items %}
+                <div class="fixed-schedule-grid__item{% if item.kind == 'official_activity' %} fixed-schedule-grid__item--activity{% endif %}"
+                     style="--top: {{ item.row_offset }}; --span: {{ item.span }}; --left: {{ item.left_pct }}%; --width: {{ item.width_pct }}%">
+                  <strong>{{ item.title }}</strong>
+                  <span>{{ item.subtitle|default:"教師未定" }}</span>
+                  <span>{{ item.meta|default:"教室未定" }}</span>
+                  <span>第 {{ item.start_period }}–{{ item.end_period }} 節</span>
+                </div>
+              {% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    <p class="help">固定課程不建立 Enrollment；灰色項目為班級活動。</p>
+    <div class="results fixed-schedule-entry-results">
+      <table id="result_list">
+        <thead><tr>
+          <th>星期／節次</th><th>課號／課名</th><th>教師</th><th>教室</th>
+          <th>學分／類別</th><th>操作</th>
+        </tr></thead>
+        <tbody>
+        {% for entry in entries %}
+          <tr{% if not entry.is_active %} class="row-inactive"{% endif %}>
+            <td>星期 {{ entry.weekday }} · 第 {{ entry.start_period }}–{{ entry.end_period }} 節</td>
+            <td>{{ entry.course_code|default:"—" }} · {{ entry.course_name|default:"活動" }}</td>
+            <td>{% if entry.teacher %}{{ entry.teacher.name }}{% else %}{{ entry.teacher_name|default:"未指定" }}{% endif %}</td>
+            <td>{{ entry.classroom|default:"未安排" }}</td>
+            <td>
+              {% if entry.credits is not None %}{{ entry.credits }} 學分{% else %}學分待確認{% endif %}
+              {% if entry.course_category %} · {{ entry.course_category }}{% endif %}
+              {% if not entry.is_active %} · 已停用{% endif %}
+            </td>
+            <td>
+              {% if draft %}
+                <a href="{% url 'admin:courses_ntubtimetablesnapshot_fixed_schedule_entry_change' class_group.pk term.pk entry.pk %}">編輯</a>
+                <form method="post" style="display:inline" action="{% url 'admin:courses_ntubtimetablesnapshot_fixed_schedule_entry_delete' class_group.pk term.pk entry.pk %}">
+                  {% csrf_token %}
+                  <button type="submit">移除草稿項目</button>
+                </form>
+              {% endif %}
+              {% if entry.managed_course_url %}
+                <a href="{{ entry.managed_course_url }}">教學大綱</a>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6">目前版本沒有課程明細。</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

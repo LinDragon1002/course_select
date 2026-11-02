@@ -1,0 +1,59 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">首頁</a> ›
+  <a href="{% url 'admin:courses_ntubtimetablesnapshot_changelist' %}">班級固定課表版本</a> ›
+  {{ snapshot.class_group.code }} · {{ snapshot.term.code }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>固定課表版本來源</h1>
+  <dl>
+    <dt>班級／系所</dt>
+    <dd>{{ snapshot.class_group.name_zh|default:snapshot.class_group.code }}（{{ snapshot.class_group.code }}）· {{ snapshot.class_group.department.name_zh }}</dd>
+    <dt>學期</dt>
+    <dd>{{ snapshot.term.code }}</dd>
+    <dt>版本來源</dt>
+    <dd>{{ snapshot.get_source_kind_display }}</dd>
+    <dt>發布狀態</dt>
+    <dd>{% if snapshot.status == "ARCHIVED" %}已撤回／封存{% elif snapshot.source_kind == "IMPORTED" %}官方來源資料{% else %}{{ snapshot.get_status_display }}{% endif %}</dd>
+    <dt>來源網址／擷取時間</dt>
+    <dd>{{ snapshot.source_url|default:"未提供" }}{% if snapshot.retrieved_at %} · {{ snapshot.retrieved_at|date:"Y-m-d H:i" }}{% endif %}</dd>
+    <dt>管理者／建立時間</dt>
+    <dd>{{ snapshot.managed_by|default:"—" }} · {{ snapshot.created_at|date:"Y-m-d H:i" }}</dd>
+  </dl>
+
+  {% if snapshot.source_kind == "IMPORTED" %}
+    <form method="post" action="{% url 'admin:courses_ntubtimetablesnapshot_source_takeover' snapshot.pk %}">
+      {% csrf_token %}
+      <button type="submit" class="default">將此來源接管為編輯草稿</button>
+      <span class="help">僅複製至新草稿，不會修改此歷史來源或目前學生課表。</span>
+    </form>
+  {% endif %}
+
+  <h2>版本明細（唯讀）</h2>
+  <div class="results fixed-schedule-entry-results">
+    <table id="result_list">
+      <thead>
+        <tr><th>星期／節次</th><th>課號／課名</th><th>教師</th><th>教室</th><th>狀態</th></tr>
+      </thead>
+      <tbody>
+      {% for entry in entries %}
+        <tr>
+          <td>星期 {{ entry.weekday }} · 第 {{ entry.start_period }}–{{ entry.end_period }} 節</td>
+          <td>{{ entry.course_code|default:"—" }} · {{ entry.course_name|default:"活動" }}</td>
+          <td>{% if entry.teacher %}{{ entry.teacher.name }}{% else %}{{ entry.teacher_name|default:"未指定" }}{% endif %}</td>
+          <td>{{ entry.classroom|default:"未安排" }}</td>
+          <td>{% if entry.is_active %}啟用{% else %}已停用{% endif %}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5">此版本沒有課表明細。</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

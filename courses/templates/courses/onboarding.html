@@ -1,0 +1,163 @@
+{% extends "courses/base.html" %}
+{% block title %}學籍設定{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>完成學籍設定</h1>
+    <p class="sub">第一次使用請先選擇學制、系所、年級與班級，之後就能開始選課。</p>
+  </div>
+</div>
+
+<ol class="onboarding-steps" aria-label="設定流程">
+  <li class="is-complete"><span>1</span><strong>登入</strong></li>
+  <li class="is-current" aria-current="step"><span>2</span><strong>設定學籍</strong></li>
+  <li><span>3</span><strong>開始選課</strong></li>
+</ol>
+
+<section class="panel setup-panel">
+  <div class="setup-identity setup-identity-card">
+    <span class="avatar avatar-large" aria-hidden="true">{{ google_name|default:google_email|slice:":1"|upper }}</span>
+    <span class="setup-identity-copy"><strong class="who-name">{{ google_name }}</strong><span class="who-meta">{{ google_email }}</span></span>
+    <span class="readonly-tag">Google 帳號</span>
+  </div>
+
+  <form method="post" class="setup-form" id="setup-form" novalidate>
+    {% csrf_token %}
+    {% if request.POST.next or request.GET.next %}
+      <input type="hidden" name="next" value="{{ request.POST.next|default:request.GET.next }}">
+    {% endif %}
+
+    <div class="setup-row">
+      <div class="setup-field">
+        <label for="id_program_type">學制</label>
+        <small>選擇你的修業制度</small>
+        <select name="program_type" id="id_program_type" required>
+          <option value="">請選擇學制</option>
+          {% for pt in cascade.program_types %}
+            <option value="{{ pt.pk }}"{% if selected.program_type == pt.pk|stringformat:'s' %} selected{% endif %}>{{ pt.name_zh }}（{{ pt.code }}）</option>
+          {% endfor %}
+        </select>
+        {% for e in form.program_type.errors %}<p class="field-error">{{ e }}</p>{% endfor %}
+      </div>
+
+      <div class="setup-field">
+        <label for="id_department">系所</label>
+        <small>依學制篩選可選系所</small>
+        <select name="department" id="id_department" required>
+          <option value="">請選擇系所</option>
+          {% for d in cascade.departments %}
+            <option value="{{ d.pk }}" data-program-type="{{ d.program_type_id }}"{% if selected.department == d.pk|stringformat:'s' %} selected{% endif %}>{{ d.name_zh }}（{{ d.code }}）</option>
+          {% endfor %}
+        </select>
+        {% for e in form.department.errors %}<p class="field-error">{{ e }}</p>{% endfor %}
+      </div>
+    </div>
+
+    <div class="setup-row">
+      <div class="setup-field">
+        <label for="id_grade">年級</label>
+        <small>選擇目前就讀年級</small>
+        <select name="grade" id="id_grade" required>
+          <option value="">請選擇年級</option>
+          {% for g in cascade.grades %}
+            <option value="{{ g.value }}" data-departments="{{ g.department_ids|join:',' }}"{% if selected.grade == g.value|stringformat:'s' %} selected{% endif %}>{{ g.label }}</option>
+          {% endfor %}
+        </select>
+        {% for e in form.grade.errors %}<p class="field-error">{{ e }}</p>{% endfor %}
+      </div>
+
+      <div class="setup-field">
+        <label for="id_class_group">班級</label>
+        <small>選擇所屬班級</small>
+        <select name="class_group" id="id_class_group" required>
+          <option value="">請選擇班級</option>
+          {% for c in cascade.class_groups %}
+            <option value="{{ c.pk }}" data-department="{{ c.department_id }}" data-grade="{{ c.grade_no|default_if_none:'' }}"{% if selected.class_group == c.pk|stringformat:'s' %} selected{% endif %}>{{ c.name_zh }}（{{ c.code }}）</option>
+          {% endfor %}
+        </select>
+        {% for e in form.class_group.errors %}<p class="field-error">{{ e }}</p>{% endfor %}
+      </div>
+    </div>
+
+    <p class="class-preview" id="class-preview" aria-live="polite">請依序選擇學制、系所、年級與班級</p>
+    <button class="btn btn-primary" type="submit">完成設定並開始選課</button>
+  </form>
+</section>
+
+<script>
+// 四階級聯：學制 → 系所 → 年級 → 班級。
+// 只是讓選單好選；送到伺服器的值仍會在伺服器端重新驗證。
+(function () {
+  var pt = document.getElementById("id_program_type");
+  var dept = document.getElementById("id_department");
+  var grade = document.getElementById("id_grade");
+  var group = document.getElementById("id_class_group");
+  if (!pt || !dept || !grade || !group) return;
+
+  function hide(select, keep) {
+    Array.prototype.forEach.call(select.options, function (opt) {
+      if (!opt.value) return;
+      opt.hidden = keep.indexOf(opt.value) === -1;
+    });
+  }
+
+  function refreshDepartments() {
+    var keep = [];
+    Array.prototype.forEach.call(dept.options, function (opt) {
+      if (opt.value && opt.dataset.programType === pt.value) keep.push(opt.value);
+    });
+    hide(dept, keep);
+    if (keep.indexOf(dept.value) === -1) dept.value = "";
+    refreshGrades();
+  }
+
+  function refreshGrades() {
+    var keep = [];
+    Array.prototype.forEach.call(grade.options, function (opt) {
+      if (!opt.value) return;
+      var ids = (opt.dataset.departments || "").split(",");
+      if (dept.value && ids.indexOf(dept.value) !== -1) keep.push(opt.value);
+    });
+    hide(grade, keep);
+    if (keep.indexOf(grade.value) === -1) grade.value = "";
+    refreshGroups();
+  }
+
+  function refreshGroups() {
+    var keep = [];
+    Array.prototype.forEach.call(group.options, function (opt) {
+      if (!opt.value) return;
+      if (opt.dataset.department === dept.value && opt.dataset.grade === grade.value) keep.push(opt.value);
+    });
+    hide(group, keep);
+    if (keep.indexOf(group.value) === -1) group.value = "";
+  }
+
+  pt.addEventListener("change", refreshDepartments);
+  dept.addEventListener("change", refreshGrades);
+  grade.addEventListener("change", refreshGroups);
+
+  var preview = document.getElementById("class-preview");
+  function updatePreview() {
+    var selections = [pt, dept, grade, group].map(function (select) {
+      return select.options[select.selectedIndex];
+    });
+    if (selections.some(function (option) { return !option || !option.value; })) {
+      preview.textContent = "請依序選擇學制、系所、年級與班級";
+      preview.classList.remove("is-ready");
+      return;
+    }
+    var classText = selections[3].textContent.trim();
+    var codeMatch = classText.match(/[（(]([^）)]+)[）)]$/);
+    var className = classText.replace(/[（(][^）)]*[）)]$/, "");
+    preview.textContent = "你的班級：" + selections[0].textContent.split(/[（(]/)[0].trim() + " " + selections[1].textContent.split(/[（(]/)[0].trim() + " " + selections[2].textContent.trim() + " " + className + (codeMatch ? " (" + codeMatch[1] + ")" : "");
+    preview.classList.add("is-ready");
+  }
+
+  [pt, dept, grade, group].forEach(function (select) { select.addEventListener("change", updatePreview); });
+
+  refreshDepartments();
+  updatePreview();
+})();
+</script>
+{% endblock %}

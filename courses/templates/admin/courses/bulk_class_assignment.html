@@ -1,0 +1,271 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">首頁</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label='courses' %}">課程</a>
+  &rsaquo; <a href="{{ changelist_url }}">班別修課政策</a>
+  &rsaquo; 批次安排班級課程
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <p>
+    請選擇學期與學生班級，再勾選要安排的來源開課班別。新政策一律建立為草稿，請使用既有功能另行發布。
+  </p>
+
+  {% if bulk_form %}
+    <form method="post" id="bulk-assign-form">
+      {% csrf_token %}
+      <input type="hidden" name="term" value="{{ selected_term }}">
+      <input type="hidden" name="class_group" value="{{ selected_class_group }}">
+      <fieldset class="module aligned">
+        <h2>選擇要安排的開課班別</h2>
+        {% if selected_class_group_obj %}
+          <p class="help">
+            已選學生班級：{{ selected_class_group_obj.department.program_type.name_zh }}
+            ／{{ selected_class_group_obj.department.name_zh }}
+            ／{{ selected_class_group_obj.grade_no }}年級
+            ／{{ selected_class_group_obj.name_zh }}（{{ selected_class_group_obj.code }}）
+          </p>
+        {% endif %}
+        {% if bulk_form.non_field_errors %}
+          <p class="errornote">{{ bulk_form.non_field_errors }}</p>
+        {% endif %}
+        {% for field in bulk_form %}
+          {% if field.name == "term" or field.name == "class_group" %}
+            {# 學期與學生班級已在上一段選定，這裡只帶 hidden 值回去。 #}
+          {% else %}
+            <div class="form-row">
+              {{ field.errors }}
+              <div>
+                {{ field.label_tag }}
+                {{ field }}
+                {% if field.help_text %}<p class="help">{{ field.help_text }}</p>{% endif %}
+              </div>
+            </div>
+          {% endif %}
+        {% endfor %}
+      </fieldset>
+      <div class="submit-row">
+        <input type="submit" value="建立草稿政策" class="default">
+        <a href="{{ changelist_url }}" class="button cancel-link">取消</a>
+      </div>
+    </form>
+  {% else %}
+    <form method="get" id="bulk-select-form">
+      <fieldset class="module aligned">
+        <h2>選擇學生班級</h2>
+        {% if select_form.non_field_errors %}
+          <p class="errornote">{{ select_form.non_field_errors }}</p>
+        {% endif %}
+        <div class="form-row">
+          {{ select_form.term.errors }}
+          <div>{{ select_form.term.label_tag }}{{ select_form.term }}</div>
+        </div>
+        <div class="form-row">
+          {{ select_form.program_type.errors }}
+          <div>
+            <label for="id_program_type">學制：</label>
+            <select name="program_type" id="id_program_type">
+              <option value="">— 請選擇學制 —</option>
+              {% for option in select_form.fields.program_type.queryset %}
+                <option value="{{ option.pk }}"{% if select_form.program_type.value == option.pk|stringformat:'s' %} selected{% endif %}>{{ option.name_zh }}（{{ option.code }}）</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          {{ select_form.department.errors }}
+          <div>
+            <label for="id_department">系所：</label>
+            <select name="department" id="id_department">
+              <option value="">— 請選擇系所 —</option>
+              {% for option in select_form.fields.department.queryset %}
+                <option value="{{ option.pk }}" data-program-type="{{ option.program_type_id }}"{% if select_form.department.value == option.pk|stringformat:'s' %} selected{% endif %}>{{ option.name_zh }}（{{ option.code }}）</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          {{ select_form.grade.errors }}
+          <div>
+            <label for="id_grade">年級：</label>
+            <select name="grade" id="id_grade">
+              {% for value, label in select_form.fields.grade.choices %}
+                <option value="{{ value }}"{% if select_form.grade.value == value|stringformat:'s' %} selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          {{ select_form.class_group.errors }}
+          <div>
+            <label for="id_class_group">學生班級：</label>
+            <select name="class_group" id="id_class_group" required>
+              <option value="">— 請選擇學生班級 —</option>
+              {% for option in select_form.fields.class_group.queryset %}
+                <option value="{{ option.pk }}" data-department="{{ option.department_id }}" data-grade="{{ option.grade_no|default_if_none:'' }}"{% if select_form.class_group.value == option.pk|stringformat:'s' %} selected{% endif %}>{{ option.name_zh }}（{{ option.code }}）</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <p class="help" id="class-confirmation" aria-live="polite">請依序選擇學制、系所、年級與班級</p>
+      </fieldset>
+      <div class="submit-row">
+        <input type="submit" value="下一步" class="default">
+        <a href="{{ changelist_url }}" class="button cancel-link">取消</a>
+      </div>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extrabody %}
+{{ block.super }}
+{% if select_form %}
+<script>
+(function () {
+  var pt = document.getElementById("id_program_type");
+  var dept = document.getElementById("id_department");
+  var grade = document.getElementById("id_grade");
+  var group = document.getElementById("id_class_group");
+  if (!pt || !dept || !grade || !group) return;
+
+  var originalDepartments = Array.prototype.map.call(dept.options, function (option) {
+    return {
+      value: option.value,
+      text: option.textContent,
+      programTypeId: option.dataset.programType
+    };
+  });
+  var originalGroups = Array.prototype.map.call(group.options, function (option) {
+    return {
+      value: option.value,
+      text: option.textContent,
+      departmentId: option.dataset.department,
+      grade: option.dataset.grade
+    };
+  });
+  var originalGroupValue = group.value;
+  var originalGradeValue = grade.value;
+
+  function replaceOptions(select, options, placeholder) {
+    select.replaceChildren();
+    var empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = placeholder;
+    select.appendChild(empty);
+    options.forEach(function (item) {
+      var option = document.createElement("option");
+      option.value = item.value;
+      option.textContent = item.text;
+      select.appendChild(option);
+    });
+  }
+
+  function restoreGroupContext() {
+    if (!originalGroupValue) return;
+    var selectedGroup = originalGroups.find(function (item) {
+      return item.value === originalGroupValue;
+    });
+    if (!selectedGroup) return;
+    var selectedDepartment = originalDepartments.find(function (item) {
+      return item.value === selectedGroup.departmentId;
+    });
+    if (selectedDepartment) {
+      pt.value = selectedDepartment.programTypeId;
+      dept.value = selectedDepartment.value;
+      originalGradeValue = selectedGroup.grade;
+    }
+  }
+
+  function refreshDepartments() {
+    var selectedDepartment = dept.value;
+    var departments = originalDepartments.filter(function (item) {
+      return item.value && item.programTypeId === pt.value;
+    });
+    replaceOptions(dept, departments, "— 請選擇系所 —");
+    dept.disabled = !pt.value;
+    dept.value = departments.some(function (item) {
+      return item.value === selectedDepartment;
+    }) ? selectedDepartment : "";
+    refreshGrades();
+  }
+
+  function refreshGrades() {
+    var selectedGrade = grade.value || originalGradeValue;
+    var grades = [];
+    originalGroups.forEach(function (item) {
+      if (item.value && item.departmentId === dept.value && item.grade &&
+          grades.indexOf(item.grade) === -1) {
+        grades.push(item.grade);
+      }
+    });
+    grades.sort(function (a, b) { return Number(a) - Number(b); });
+    replaceOptions(grade, grades.map(function (value) {
+      return { value: value, text: value + " 年級" };
+    }), dept.value ? "— 請選擇年級 —" : "請先選擇系所");
+    grade.disabled = !dept.value;
+    grade.value = grades.indexOf(selectedGrade) !== -1 ? selectedGrade : "";
+    refreshGroups();
+  }
+
+  function refreshGroups() {
+    var selectedGroup = group.value;
+    var groups = originalGroups.filter(function (item) {
+      return item.value && item.departmentId === dept.value &&
+        item.grade === grade.value;
+    });
+    replaceOptions(group, groups, grade.value ? "— 請選擇學生班級 —" : "請先選擇年級");
+    group.disabled = !grade.value;
+    group.value = groups.some(function (item) {
+      return item.value === selectedGroup || item.value === originalGroupValue;
+    }) ? (selectedGroup || originalGroupValue) : "";
+    updateConfirmation();
+  }
+
+  function updateConfirmation() {
+    var selected = [pt, dept, grade, group].map(function (select) {
+      return select.options[select.selectedIndex];
+    });
+    var confirmation = document.getElementById("class-confirmation");
+    if (selected.some(function (option) { return !option || !option.value; })) {
+      confirmation.textContent = "請依序選擇學制、系所、年級與班級";
+      return;
+    }
+    confirmation.textContent = "已選學生班級：" + selected[0].textContent + "／" +
+      selected[1].textContent + "／" + selected[2].textContent + "／" +
+      selected[3].textContent;
+  }
+
+  pt.addEventListener("change", function () {
+    dept.value = "";
+    grade.value = "";
+    group.value = "";
+    originalGradeValue = "";
+    originalGroupValue = "";
+    refreshDepartments();
+  });
+  dept.addEventListener("change", function () {
+    grade.value = "";
+    group.value = "";
+    originalGradeValue = "";
+    originalGroupValue = "";
+    refreshGrades();
+  });
+  grade.addEventListener("change", function () {
+    group.value = "";
+    originalGroupValue = "";
+    refreshGroups();
+  });
+  group.addEventListener("change", updateConfirmation);
+
+  restoreGroupContext();
+  refreshDepartments();
+})();
+</script>
+{% endif %}
+{% endblock %}

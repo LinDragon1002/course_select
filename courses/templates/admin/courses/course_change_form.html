@@ -1,0 +1,14 @@
+{% extends "admin/change_form.html" %}
+{% load admin_modify %}
+
+{% block submit_buttons_bottom %}
+  {% submit_row %}
+  {% if original %}
+    <div class="submit-row">
+      <button type="submit" name="_publish_syllabus" value="1" class="default">
+        確認並發布課綱
+      </button>
+      <span class="help">發布後學生才能查看；編輯並儲存課綱會回到草稿狀態。</span>
+    </div>
+  {% endif %}
+{% endblock %}

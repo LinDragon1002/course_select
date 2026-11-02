@@ -131,13 +131,17 @@ class PrereqTests(CourseTestCase):
         self.assertContains(r, "先修")
         self.assertEqual(self.mine(), 0)
 
-    def test_guest_list_shows_prereqs_unmarked(self):
+    def test_guest_redirects_to_login(self):
         a = self.section("CS301", "A", 3, 5)
         self.with_prereq(a, "CS201")
+
         r = self.client.get(reverse("course_list"))
-        self.assertContains(r, "先修：CS201")
-        self.assertNotContains(r, "未修")
-        self.assertNotContains(r, "✓")
+
+        self.assertRedirects(
+            r,
+            f"{reverse('login')}?next={reverse('course_list')}",
+            fetch_redirect_response=False,
+        )
 
     def test_logged_in_list_marks_completed_and_missing(self):
         self.client.force_login(self.u)

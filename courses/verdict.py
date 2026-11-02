@@ -6,11 +6,20 @@ POST 規則順序與 docs/business-rules.md §5 一致：
 選課時間窗 → 同課不重複 → 先修已修 → 不衝堂 → 額滿轉等待 → 不超學分。
 按鈕例外：「已加選這班／已排隊（班別仍額滿）」先於時間窗
 （退選、取消等待不受時間窗影響，docs §7）。
+
+官方開課（NtubOfferingSource）另有一關：**班別修課政策**。政策必須已發布
+且可自行加選才開放；政策判定在 `enrollment_policy.policy_decision`，
+官方班級課表的衝堂判定在 `enrollment_policy.official_conflicting_entry`。
+政策在「已加選／已排隊」之後才檢查，所以政策被撤回時，已加選者仍可退選、
+已排隊者仍可取消等待。
+
 新規則只加這裡一個分支。
 """
 from dataclasses import dataclass
 
 from django.conf import settings
+
+from .enrollment_policy import official_conflicting_entry, policy_decision
 
 
 def missing_prereqs(course, passed):
@@ -34,7 +43,8 @@ class Verdict:
 
     code：現在 POST 加選會得到 register() 回傳的結果
         （enrolled / already / prereq / conflict / waitlisted /
-          already_waitlisted / over_credits / not_open / closed）
+          already_waitlisted / over_credits / not_open / closed /
+          policy_missing / policy_closed）
     action：班別列按鈕要顯示的動作
         （drop / cancel_wait / enroll / waitlist / blocked_*）
     severity：register 回傳時 django messages 的等級
@@ -58,6 +68,9 @@ def evaluate(standing, section, window):
     standing 是該使用者在本學期的 Standing（standing.get_standing）；
     window 是 window_gate 的傳回值 (state, message)。
     三態之外的 window state 丟 ValueError（vocabulary 只由 window_gate 產生）。
+
+    standing 另帶著班別修課政策（standing.policies）與班級官方課表
+    （standing.official_entries），官方開課的加選判定會用到它們。
 
     注意：waitlisted 的 message 是預佔的；register commit 出等待列後
     才補上真實的「第 N 位」。
@@ -88,6 +101,11 @@ def evaluate(standing, section, window):
                        "cancel_wait", "info", position=position)
     if state != "open":
         return Verdict(state, window_message, f"blocked_{state}", "warning")
+    # 官方開課的班別修課政策：已發布且可自行加選才開放。
+    # 放在「已加選／已排隊／時間窗」之後，所以退選與取消等待不受政策影響。
+    decision = policy_decision(section, standing.class_group, standing.policies)
+    if not decision.allowed:
+        return Verdict(decision.code, decision.message, decision.action, "warning")
     if missing := missing_prereqs(course, standing.passed):
         names = "、".join(f"{c.code} {c.name}" for c in missing)
         return Verdict("prereq", f"還缺先修課：{names}。", "blocked_prereq", "error")
@@ -95,8 +113,17 @@ def evaluate(standing, section, window):
         return Verdict("conflict",
                        f"衝堂：和「{clash.course.name} {clash.label_display}」時間重疊。",
                        "blocked_conflict", "error")
+    # 班級官方課表也是時間基線：撞到「不同課號」的官方課程就算衝堂；
+    # 官方課表本來就有同一門課時不算（見 enrollment_policy）。
+    if (entry := official_conflicting_entry(section, standing.official_entries)):
+        return Verdict("conflict",
+                       f"衝堂：和班級官方課表「{entry.course_name}」時間重疊。",
+                       "blocked_conflict", "error")
     if section.is_full:
         return Verdict("waitlisted", f"{section.label_display}已額滿。", "waitlist", "info")
-    if standing.credits + course.credits > settings.MAX_CREDITS:
-        return Verdict("over_credits", f"超過學分上限 {settings.MAX_CREDITS}。", "blocked_credits", "error")
+    maximum = (standing.credit_summary.limits.maximum
+               if standing.credit_summary and standing.credit_summary.limits
+               else settings.MAX_CREDITS)
+    if standing.credits + course.credits > maximum:
+        return Verdict("over_credits", f"超過學分上限 {maximum}。", "blocked_credits", "error")
     return Verdict("enrolled", f"已加選「{course.name} {section.label_display}」。", "enroll", "success")

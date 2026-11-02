@@ -1,0 +1,129 @@
+/* NTUB 選課系統 design tokens
+   主色：北商紫 #5B2A86。請勿在元件裡寫死色碼，改引用這裡的變數。 */
+
+:root {
+  /* Brand / primary scale */
+  --primary-50: #f6f0fb;
+  --primary-100: #ede4f6;
+  --primary-200: #d9c7ea;
+  --primary-300: #c1a3db;
+  --primary-400: #a47ac8;
+  --primary-500: #7d4aa8;
+  --primary-600: #5b2a86;
+  --primary-700: #4a226d;
+  --primary-800: #3b1b57;
+  --primary-900: #2a1340;
+  --primary: var(--primary-600);
+
+  /* Neutrals (cool gray, never pure black) */
+  --text: #1f2430;
+  --text-muted: #5c6370;
+  --text-faint: #8b919d;
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --raised: #ffffff;
+  --border: #e4e5eb;
+  --border-strong: #cfd2da;
+  --border-subtle: #eceef2;
+  --rule: #eceef2;
+
+  /* Semantic */
+  --success: #1b7a4e;
+  --success-bg: #e8f6ee;
+  --success-border: #b7e0c8;
+  --success-text: #145c3b;
+
+  --warning: #c47a12;
+  --warning-bg: #fff6e8;
+  --warning-border: #f0d4a0;
+  --warning-text: #8a5608;
+
+  --danger: #c0362c;
+  --danger-bg: #fdecec;
+  --danger-border: #f0b8b4;
+  --danger-text: #8e241c;
+
+  --info: #2b6cb0;
+  --info-bg: #e8f2fc;
+  --info-border: #b5d4f0;
+  --info-text: #1e4e80;
+
+  /* Schedule blocks */
+  --slot-official-bg: #e4f1e9;
+  --slot-official-border: #b8d7c2;
+  --slot-official-text: #315d3d;
+  --slot-official-bar: #6ea37b;
+
+  --slot-activity-bg: #eceef1;
+  --slot-activity-border: #d5d9df;
+  --slot-activity-text: #4a4a55;
+  --slot-activity-bar: #9a9aa8;
+
+  --slot-enrolled-bg: #fbebd9;
+  --slot-enrolled-border: #e6c6a9;
+  --slot-enrolled-text: #70452d;
+  --slot-enrolled-bar: #c7834d;
+
+  --slot-merged-bg: #e8f4ec;
+  --slot-merged-border: #b7dcc4;
+  --slot-merged-text: #23543a;
+  --slot-merged-bar: #3d8a5a;
+
+  /* Radius */
+  --radius-card: 12px;
+  --radius-control: 8px;
+  --radius-chip: 6px;
+  --radius-full: 999px;
+
+  /* Shadow (2–3 levels only) */
+  --shadow-1: 0 1px 2px rgba(31, 36, 48, 0.06);
+  --shadow-2: 0 4px 12px rgba(31, 36, 48, 0.08);
+  --shadow-3: 0 10px 24px rgba(31, 36, 48, 0.1);
+
+  /* Space */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 40px;
+  --gap: 24px;
+  --sidebar-width: 208px;
+  --header-height: 56px;
+
+  /* Type */
+  --font: "Inter", "Noto Sans TC", system-ui, -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+  --fs-title: 26px;
+  --fs-section: 18px;
+  --fs-kpi: 24px;
+  --fs-body: 14.5px;
+  --fs-small: 13px;
+  --fs-tiny: 12px;
+  --lh-body: 1.55;
+  --lh-title: 1.25;
+
+  --ease: 180ms ease;
+  --focus-ring: 2px solid var(--primary-600);
+  --focus-offset: 2px;
+
+  /* Backward-compatible aliases used by older page CSS */
+  --ground: var(--bg);
+  --control: var(--border-strong);
+  --muted: var(--text-muted);
+  --faint: var(--text-faint);
+  --accent: var(--primary-600);
+  --accent-soft: var(--primary-50);
+  --accent-track: var(--primary-100);
+  --accent-ink: var(--primary-800);
+  --negative: var(--danger);
+  --warning-soft: var(--warning-bg);
+  --pill-negative-bg: var(--danger-bg);
+  --pill-negative-ink: var(--danger-text);
+  --pill-positive-bg: var(--success-bg);
+  --pill-positive-ink: var(--success-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --ease: 0ms; }
+}

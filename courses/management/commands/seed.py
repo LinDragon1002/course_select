@@ -46,11 +46,20 @@ class Command(BaseCommand):
 
     def handle(self, *args, **opts):
         now = timezone.now()
+        # 示範學期 114-1 只有在「目前沒有任何當前學期」時才會成為當前學期。
+        # 正式的本機開發資料庫已經有真實的當前學期（例如 115-1），此時再跑 seed
+        # 不應該把它搶走——否則學生會突然看到示範課程。清除示範資料請用
+        # `manage.py cleanup_demo_data`。
+        steal_current = not Term.objects.filter(is_current=True).exists()
         term, _ = Term.objects.update_or_create(code="114-1", defaults={
-            "is_current": True,
+            "is_current": steal_current,
             "enroll_open": now - timedelta(days=1),    # 昨天開放
             "enroll_close": now + timedelta(days=14),  # 兩週後截止 → 「加選中」
         })
+        if not steal_current:
+            self.stdout.write(
+                self.style.WARNING(
+                    "資料庫已有當前學期，示範學期 114-1 不會被設為當前學期（避免蓋掉真實資料）。"))
         for code, name, teacher, cr, syl, sections in DATA:
             t, _ = Teacher.objects.get_or_create(name=teacher)
             course, _ = Course.objects.update_or_create(term=term, code=code,

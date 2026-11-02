@@ -1,0 +1,33 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">首頁</a>
+  &rsaquo; <a href="{% url 'admin:courses_course_syllabus_review' %}">待審核教學大綱</a>
+  &rsaquo; {{ course }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>審核教學大綱：{{ course }}</h1>
+  <p>教師：{{ submission.teacher }}；學期：{{ course.term }}；提交時間：{{ submission.submitted_at|date:"Y-m-d H:i" }}</p>
+  {% if error_message %}<p class="errornote">{{ error_message }}</p>{% endif %}
+  <form method="post">
+    {% csrf_token %}
+    <fieldset class="module aligned">
+      <h2>檢視並修正內容</h2>
+      {% include "admin/courses/_syllabus_fields.html" with basic_fields=basic_fields weekly_fields=weekly_fields closing_fields=closing_fields read_only=False %}
+    </fieldset>
+    <fieldset class="module aligned">
+      <label for="id_return_reason">退回原因</label>
+      <textarea id="id_return_reason" name="return_reason" rows="3">{{ return_reason }}</textarea>
+    </fieldset>
+    <div class="submit-row">
+      <button type="submit" class="default" name="review_action" value="publish">確認並發布</button>
+      <button type="submit" class="button" name="review_action" value="return">退回教師修改</button>
+      <a class="button" href="{% url 'admin:courses_course_syllabus_review' %}">返回審核列表</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

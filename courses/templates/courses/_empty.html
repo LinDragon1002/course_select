@@ -1,0 +1,12 @@
+{# 空狀態：title、text 必填；action_url / action_label 可選。 #}
+<div class="empty-state">
+  <svg class="empty-illus" width="56" height="56" viewBox="0 0 56 56" fill="none" aria-hidden="true">
+    <rect x="8" y="12" width="40" height="32" rx="6" stroke="currentColor" stroke-width="2"/>
+    <path d="M16 22h24M16 28h16M16 34h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </svg>
+  {% if title %}<h3 class="empty-title">{{ title }}</h3>{% endif %}
+  {% if text %}<p>{{ text }}</p>{% endif %}
+  {% if action_url and action_label %}
+  <a class="btn btn-primary" href="{{ action_url }}">{{ action_label }}</a>
+  {% endif %}
+</div>

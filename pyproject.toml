@@ -5,5 +5,8 @@ description = "選課系統"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "adminlte-django==0.3.2",
     "django>=5.1",
+    "django-allauth[socialaccount]>=65",
+    "python-dotenv>=1.0",
 ]

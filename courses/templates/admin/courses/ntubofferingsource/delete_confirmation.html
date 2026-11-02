@@ -1,0 +1,21 @@
+{% extends "admin/delete_confirmation.html" %}
+
+{% block content %}
+{% if source_deletion_impact %}
+  <div class="messagelist">
+    <p>即將刪除 {{ source_deletion_impact.source_count }} 筆歷史官方開課來源；只移除來源追蹤列，不刪除其指向的業務資料。</p>
+    <p>保留 {{ source_deletion_impact.course_count }} 門 Course、{{ source_deletion_impact.teacher_count }} 位 Teacher、{{ source_deletion_impact.section_count }} 個 Section、{{ source_deletion_impact.enrollment_count }} 筆 Enrollment、{{ source_deletion_impact.waitlist_count }} 筆 Waitlist。</p>
+    <p>保留 {{ source_deletion_impact.fixed_entry_count }} 筆固定課表明細、{{ source_deletion_impact.published_syllabus_count }} 份已發布教學大綱及 {{ source_deletion_impact.syllabus_submission_count }} 筆教師課綱提交。</p>
+    <p>另有 {{ source_deletion_impact.recommendation_count }} 筆課綱推薦、{{ source_deletion_impact.candidate_count }} 筆候選、{{ source_deletion_impact.ambiguity_count }} 筆來源疑義以 SET_NULL 連結此來源；刪除後這些紀錄會保留，來源欄位改為空白。</p>
+    {% if source_deletion_impact.protected_relations %}
+      <p>以下關聯會阻擋刪除：</p>
+      <ul>
+        {% for relation in source_deletion_impact.protected_relations %}
+          <li>{{ relation.model }}：{{ relation.count }} 筆。{{ relation.reason }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+{% endif %}
+{{ block.super }}
+{% endblock %}

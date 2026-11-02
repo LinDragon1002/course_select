@@ -1,0 +1,877 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-10-30T00:30:35.513506+00:00",
+  "scope": "class_timetable",
+  "produces_enrollments": false,
+  "source": {
+    "provider": "NTUB 官方班級課表",
+    "source_url": "https://ntcbadm.ntub.edu.tw/pub/Cur_Class.aspx",
+    "directory": "C:\\Users\\user\\OneDrive\\Desktop\\course_select\\coursepuzzle-main\\data\\ntub_timetables",
+    "files": [
+      "115-1_40620A.json",
+      "115-1_40630B.json"
+    ]
+  },
+  "terms": [
+    {
+      "code": "115-1"
+    }
+  ],
+  "classes": [
+    {
+      "class_code": "40620A",
+      "class_name": "四技資管二年甲班",
+      "academic_year": "115",
+      "semester": "1",
+      "term_code": "115-1",
+      "academic_year_ad": 2026,
+      "department": "406",
+      "education_level": "4",
+      "scope": "class",
+      "is_student_enrollment": false,
+      "counts": {
+        "total": 9,
+        "course": 7,
+        "activity": 2
+      },
+      "entries": [
+        {
+          "entry_type": "course",
+          "weekday": 1,
+          "weekday_label": "週一",
+          "weekday_name": "一",
+          "start_period": 2,
+          "end_period": 4,
+          "periods": [
+            2,
+            3,
+            4
+          ],
+          "period_count": 3,
+          "is_consecutive": true,
+          "course": {
+            "code": "40626610",
+            "serial": "10",
+            "name": "資訊網路",
+            "teacher": "蒯思齊",
+            "classroom": "電606(承曦樓)"
+          },
+          "activity": null,
+          "source": {
+            "raw_text": "資訊網路 | 蒯思齊 | 電606(承曦樓)",
+            "href": "javascript:ConnectCos_Short('115','1','40620A','10','40626610');",
+            "notes": [],
+            "course_ref": {
+              "academic_year": "115",
+              "semester": "1",
+              "class_code": "40620A",
+              "serial": "10",
+              "course_id": "40626610"
+            }
+          },
+          "warnings": []
+        },
+        {
+          "entry_type": "course",
+          "weekday": 1,
+          "weekday_label": "週一",
+          "weekday_name": "一",
+          "start_period": 5,
+          "end_period": 7,
+          "periods": [
+            5,
+            6,
+            7
+          ],
+          "period_count": 3,
+          "is_consecutive": true,
+          "course": {
+            "code": "40624660",
+            "serial": "21",
+            "name": "財務管理",
+            "teacher": "賴蓉禾",
+            "classroom": "電607(承曦樓)"
+          },
+          "activity": null,
+          "source": {
+            "raw_text": "財務管理 | 賴蓉禾 | 電607(承曦樓)",
+            "href": "javascript:ConnectCos_Short('115','1','40620A','21','40624660');",
+            "notes": [],
+            "course_ref": {
+              "academic_year": "115",
+              "semester": "1",
+              "class_code": "40620A",
+              "serial": "21",
+              "course_id": "40624660"
+            }
+          },
+          "warnings": []
+        },
+        {
+          "entry_type": "activity",
+          "weekday": 1,
+          "weekday_label": "週一",
+          "weekday_name": "一",
+          "start_period": 8,
+          "end_period": 9,
+          "periods": [
+            8,
+            9
+          ],
+          "period_count": 2,
+          "is_consecutive": true,
+          "course": null,
+          "activity": {
+            "name": "共同空堂"
+          },
+          "source": {
+            "raw_text": "共同空堂",
+            "href": "",
+            "notes": [],
+            "course_ref": null
+          },
+          "warnings": []
+        },
+        {
+          "entry_type": "activity",
+          "weekday": 3,
+          "weekday_label": "週三",
+          "weekday_name": "三",
+          "start_period": 8,
+          "end_period": 9,
+          "periods": [
+            8,
+            9
+          ],
+          "period_count": 2,
+          "is_consecutive": true,
+          "course": null,
+          "activity": {
+            "name": "課外活動"
+          },
+          "source": {
+            "raw_text": "課外活動",
+            "href": "",
+            "notes": [],
+            "course_ref": null
+          },
+          "warnings": []
+        },
+        {
+          "entry_type": "course",
+          "weekday": 4,
+          "weekday_label": "週四",
+          "weekday_name": "四",
+          "start_period": 2,
+          "end_period": 4,
+          "periods": [
+            2,
+            3,
+            4
+          ],
+          "period_count": 3,
+          "is_consecutive": true,
+          "course": {
+            "code": "40627960",
+            "serial": "19",
+            "name": "網站應用程式設計",
+            "teacher": "林俊杰",
+            "classroom": "電708(承曦樓)"
+          },
+          "activity": null,
+          "source": {
+            "raw_text": "網站應用程式設計 | 林俊杰 | 電708(承曦樓)",
+            "href": "javascript:ConnectCos_Short('115','1','40620A','19','40627960');",
+            "notes": [],
+            "course_ref": {
+              "academic_year": "115",
+              "semester": "1",
+              "class_code": "40620A",
+              "serial": "19",
+              "course_id": "40627960"
+            }
+          },
+          "warnings": []
+        },
+        {
+          "entry_type": "course",
+          "weekday": 4,
+          "weekday_label": "週四",
+          "weekday_name": "四",
+          "start_period": 5,
+          "end_period": 7,
+          "periods": [
+            5,
+            6,
+            7
+          ],
+          "period_count": 3,
+          "is_consecutive": true,
+          "course": {
+            "code": "40626010",
+            "serial": "7",
+            "name": "資料庫管理",
+            "teacher": "李文毅",
+            "classroom": "電708(承曦樓)"
+          },
+          "activity": null,
+          "source": {
+            "raw_text": "資料庫管理 | 李文毅 | 電708(承曦樓)",
+            "href": "javascript:ConnectCos_Short('115','1','40620A','7','40626010');",
+            "notes": [],
+            "course_ref": {
+              "academic_year": "115",
+              "semester": "1",
+              "class_code": "40620A",
+              "serial": "7",
+              "course_id": "40626010"
+            }
+          },
+          "warnings": []
+        },
+        {
+          "entry_type": "course",
+          "weekday": 4,
+          "weekday_label": "週四",
+          "weekday_name": "四",
+          "start_period": 8,
+          "end_period": 9,
+          "periods": [
+            8,
+            9
+          ],
+          "period_count": 2,
+          "is_consecutive": true,
+          "course": {
+            "code": "90319000",
+            "serial": "23",
+            "name": "軍訓(選修)",
+            "teacher": "待聘",
+            "classroom": "待排教室"
+          },
+          "activity": null,
+          "source": {
+            "raw_text": "軍訓(選修) | 待聘 | 待排教室",
+            "href": "javascript:ConnectCos_Short('115','1','40620A','23','90319000');",
+            "notes": [],
+            "course_ref": {
+              "academic_year": "115",
+              "semester": "1",
+              "class_code": "40620A",
+              "serial": "23",
+              "course_id": "90319000"
+            }
+          },
+          "warnings": []
+        },
+        {
+          "entry_type": "course",
+          "weekday": 5,
+          "weekday_label": "週五",
+          "weekday_name": "五",
+          "start_period": 2,
+          "end_period": 4,
+          "periods": [
+            2,
+            3,
+            4
+          ],
+          "period_count": 3,
+          "is_consecutive": true,
+          "course": {
+            "code": "40625200",
+            "serial": "5",
+            "name": "資料結構",
+            "teacher": "李家生",
+            "classroom": "藝409"
+          },
+          "activity": null,
+          "source": {
+            "raw_text": "資料結構 | 李家生 | 藝409",
+            "href": "javascript:ConnectCos_Short('115','1','40620A','5','40625200');",
+            "notes": [],
+            "course_ref": {
+              "academic_year": "115",
+              "semester": "1",
+              "class_code": "40620A",
+              "serial": "5",
+              "course_id": "40625200"
+            }
+          },
+          "warnings": []
+        },
+        {
+          "entry_type": "course",
+          "weekday": 5,
+          "weekday_label": "週五",
+          "weekday_name": "五",
+          "start_period": 5,
+          "end_period": 7,
+          "periods": [
+            5,
+            6,
+            7
+          ],
+          "period_count": 3,
+          "is_consecutive": true,
+          "course": {
+            "code": "40627440",
+            "serial": "15",
+            "name": "數位內容概論",
+            "teacher": "蕭培元",
+            "classroom": "資401"
+          },
+          "activity": null,
+          "source": {
+            "raw_text": "數位內容概論 | 蕭培元 | 資401",
+            "href": "javascript:ConnectCos_Short('115','1','40620A','15','40627440');",
+            "notes": [],
+            "course_ref": {
+              "academic_year": "115",
+              "semester": "1",
+              "class_code": "40620A",
+              "serial": "15",
+              "course_id": "40627440"
+            }
+          },
+          "warnings": []
+        }
+      ],
+      "source": {
+        "file": "115-1_40620A.json",
+        "source_url": "https://ntcbadm.ntub.edu.tw/pub/Cur_Class.aspx",
+        "retrieved_at": "2026-10-28T16:15:41.634985+00:00",
+        "exported_at": "2026-10-28T16:15:41.636004+00:00",
+        "request": {
+          "academic_year": "115",
+          "semester": "1",
+          "edu": "4",
+          "dept": "406",
+          "class_code": "40620A"
+        },
+        "stats": {
+          "n_entries": 9,
+          "n_unique_courses": 7,
+          "unique_courses": [
+            "數位內容概論",
+            "網站應用程式設計",
+            "財務管理",
+            "資料庫管理",
+            "資料結構",
+            "資訊網路",
+            "軍訓(選修)"
+          ]
+        },
+        "ambiguities": []
+      },
+      "warnings": []
+    },
+    {
+      "class_code": "40630B",
+      "class_name": "四技資管三年乙班",
+      "academic_year": "115",
+      "semester": "1",
+      "term_code": "115-1",
+      "academic_year_ad": 2026,
+      "department": "406",
+      "education_level": "4",
+      "scope": "class",
+      "is_student_enrollment": false,
+      "counts": {
+        "total": 7,
+        "course": 5,
+        "activity": 2
+      },
+      "entries": [
+        {
+          "entry_type": "activity",
+          "weekday": 1,
+          "weekday_label": "週一",
+          "weekday_name": "一",
+          "start_period": 8,
+          "end_period": 9,
+          "periods": [
+            8,
+            9
+          ],
+          "period_count": 2,
+          "is_consecutive": true,
+          "course": null,
+          "activity": {
+            "name": "共同空堂"
+          },
+          "source": {
+            "raw_text": "共同空堂",
+            "href": "",
+            "notes": [],
+            "course_ref": null
+          },
+          "warnings": []
+        },
+        {
+          "entry_type": "course",
+          "weekday": 2,
+          "weekday_label": "週二",
+          "weekday_name": "二",
+          "start_period": 7,
+          "end_period": 8,
+          "periods": [
+            7,
+            8
+          ],
+          "period_count": 2,
+          "is_consecutive": true,
+          "course": {
+            "code": "40037270",
+            "serial": "24",
+            "name": "生活藝術賞析",
+            "teacher": "張婕",
+            "classroom": "音樂廳"
+          },
+          "activity": null,
+          "source": {
+            "raw_text": "生活藝術賞析 | 張婕 | 音樂廳",
+            "href": "javascript:ConnectCos_Short('115','1','40630B','24','40037270');",
+            "notes": [],
+            "course_ref": {
+              "academic_year": "115",
+              "semester": "1",
+              "class_code": "40630B",
+              "serial": "24",
+              "course_id": "40037270"
+            }
+          },
+          "warnings": []
+        },
+        {
+          "entry_type": "course",
+          "weekday": 3,
+          "weekday_label": "週三",
+          "weekday_name": "三",
+          "start_period": 5,
+          "end_period": 7,
+          "periods": [
+            5,
+            6,
+            7
+          ],
+          "period_count": 3,
+          "is_consecutive": true,
+          "course": {
+            "code": "40635210",
+            "serial": "1",
+            "name": "作業系統",
+            "teacher": "林志宗",
+            "classroom": "電703(承曦樓)"
+          },
+          "activity": null,
+          "source": {
+            "raw_text": "作業系統 | 林志宗 | 電703(承曦樓)",
+            "href": "javascript:ConnectCos_Short('115','1','40630B','1','40635210');",
+            "notes": [],
+            "course_ref": {
+              "academic_year": "115",
+              "semester": "1",
+              "class_code": "40630B",
+              "serial": "1",
+              "course_id": "40635210"
+            }
+          },
+          "warnings": []
+        },
+        {
+          "entry_type": "activity",
+          "weekday": 3,
+          "weekday_label": "週三",
+          "weekday_name": "三",
+          "start_period": 8,
+          "end_period": 9,
+          "periods": [
+            8,
+            9
+          ],
+          "period_count": 2,
+          "is_consecutive": true,
+          "course": null,
+          "activity": {
+            "name": "課外活動"
+          },
+          "source": {
+            "raw_text": "課外活動",
+            "href": "",
+            "notes": [],
+            "course_ref": null
+          },
+          "warnings": []
+        },
+        {
+          "entry_type": "course",
+          "weekday": 4,
+          "weekday_label": "週四",
+          "weekday_name": "四",
+          "start_period": 5,
+          "end_period": 6,
+          "periods": [
+            5,
+            6
+          ],
+          "period_count": 2,
+          "is_consecutive": true,
+          "course": {
+            "code": "40037250",
+            "serial": "23",
+            "name": "智慧綠能",
+            "teacher": "林炯明",
+            "classroom": "藝409"
+          },
+          "activity": null,
+          "source": {
+            "raw_text": "智慧綠能 | 林炯明 | 藝409",
+            "href": "javascript:ConnectCos_Short('115','1','40630B','23','40037250');",
+            "notes": [],
+            "course_ref": {
+              "academic_year": "115",
+              "semester": "1",
+              "class_code": "40630B",
+              "serial": "23",
+              "course_id": "40037250"
+            }
+          },
+          "warnings": []
+        },
+        {
+          "entry_type": "course",
+          "weekday": 4,
+          "weekday_label": "週四",
+          "weekday_name": "四",
+          "start_period": 7,
+          "end_period": 8,
+          "periods": [
+            7,
+            8
+          ],
+          "period_count": 2,
+          "is_consecutive": true,
+          "course": {
+            "code": "40630991",
+            "serial": "10",
+            "name": "體育三(上)",
+            "teacher": "姜凱心",
+            "classroom": "體育館"
+          },
+          "activity": null,
+          "source": {
+            "raw_text": "體育三(上) | 姜凱心 | 體育館",
+            "href": "javascript:ConnectCos_Short('115','1','40630B','10','40630991');",
+            "notes": [],
+            "course_ref": {
+              "academic_year": "115",
+              "semester": "1",
+              "class_code": "40630B",
+              "serial": "10",
+              "course_id": "40630991"
+            }
+          },
+          "warnings": []
+        },
+        {
+          "entry_type": "course",
+          "weekday": 5,
+          "weekday_label": "週五",
+          "weekday_name": "五",
+          "start_period": 5,
+          "end_period": 7,
+          "periods": [
+            5,
+            6,
+            7
+          ],
+          "period_count": 3,
+          "is_consecutive": true,
+          "course": {
+            "code": "40636390",
+            "serial": "25",
+            "name": "社群大數據分析",
+            "teacher": "劉智華",
+            "classroom": "電607(承曦樓)"
+          },
+          "activity": null,
+          "source": {
+            "raw_text": "社群大數據分析 | 劉智華 | 電607(承曦樓)",
+            "href": "javascript:ConnectCos_Short('115','1','40630B','25','40636390');",
+            "notes": [],
+            "course_ref": {
+              "academic_year": "115",
+              "semester": "1",
+              "class_code": "40630B",
+              "serial": "25",
+              "course_id": "40636390"
+            }
+          },
+          "warnings": []
+        }
+      ],
+      "source": {
+        "file": "115-1_40630B.json",
+        "source_url": "https://ntcbadm.ntub.edu.tw/pub/Cur_Class.aspx",
+        "retrieved_at": "2026-10-28T16:15:03.279954+00:00",
+        "exported_at": "2026-10-28T16:15:03.280945+00:00",
+        "request": {
+          "academic_year": "115",
+          "semester": "1",
+          "edu": "4",
+          "dept": "406",
+          "class_code": "40630B"
+        },
+        "stats": {
+          "n_entries": 7,
+          "n_unique_courses": 5,
+          "unique_courses": [
+            "作業系統",
+            "智慧綠能",
+            "生活藝術賞析",
+            "社群大數據分析",
+            "體育三(上)"
+          ]
+        },
+        "ambiguities": []
+      },
+      "warnings": []
+    }
+  ],
+  "totals": {
+    "class_count": 2,
+    "entry_count": 16,
+    "course_count": 12,
+    "activity_count": 4
+  },
+  "orm_records": {
+    "terms": [
+      {
+        "code": "115-1"
+      }
+    ],
+    "teachers": [
+      {
+        "name": "劉智華"
+      },
+      {
+        "name": "姜凱心"
+      },
+      {
+        "name": "張婕"
+      },
+      {
+        "name": "待聘"
+      },
+      {
+        "name": "李家生"
+      },
+      {
+        "name": "李文毅"
+      },
+      {
+        "name": "林俊杰"
+      },
+      {
+        "name": "林志宗"
+      },
+      {
+        "name": "林炯明"
+      },
+      {
+        "name": "蒯思齊"
+      },
+      {
+        "name": "蕭培元"
+      },
+      {
+        "name": "賴蓉禾"
+      }
+    ],
+    "courses": [
+      {
+        "code": "40626610",
+        "name": "資訊網路",
+        "teacher": "蒯思齊",
+        "term": "115-1"
+      },
+      {
+        "code": "40624660",
+        "name": "財務管理",
+        "teacher": "賴蓉禾",
+        "term": "115-1"
+      },
+      {
+        "code": "40627960",
+        "name": "網站應用程式設計",
+        "teacher": "林俊杰",
+        "term": "115-1"
+      },
+      {
+        "code": "40626010",
+        "name": "資料庫管理",
+        "teacher": "李文毅",
+        "term": "115-1"
+      },
+      {
+        "code": "90319000",
+        "name": "軍訓(選修)",
+        "teacher": "待聘",
+        "term": "115-1"
+      },
+      {
+        "code": "40625200",
+        "name": "資料結構",
+        "teacher": "李家生",
+        "term": "115-1"
+      },
+      {
+        "code": "40627440",
+        "name": "數位內容概論",
+        "teacher": "蕭培元",
+        "term": "115-1"
+      },
+      {
+        "code": "40037270",
+        "name": "生活藝術賞析",
+        "teacher": "張婕",
+        "term": "115-1"
+      },
+      {
+        "code": "40635210",
+        "name": "作業系統",
+        "teacher": "林志宗",
+        "term": "115-1"
+      },
+      {
+        "code": "40037250",
+        "name": "智慧綠能",
+        "teacher": "林炯明",
+        "term": "115-1"
+      },
+      {
+        "code": "40630991",
+        "name": "體育三(上)",
+        "teacher": "姜凱心",
+        "term": "115-1"
+      },
+      {
+        "code": "40636390",
+        "name": "社群大數據分析",
+        "teacher": "劉智華",
+        "term": "115-1"
+      }
+    ],
+    "sections": [
+      {
+        "course": "40626610",
+        "label": "40620A",
+        "day": 1,
+        "start_period": 2,
+        "end_period": 4,
+        "room": "電606(承曦樓)",
+        "class_code": "40620A"
+      },
+      {
+        "course": "40624660",
+        "label": "40620A",
+        "day": 1,
+        "start_period": 5,
+        "end_period": 7,
+        "room": "電607(承曦樓)",
+        "class_code": "40620A"
+      },
+      {
+        "course": "40627960",
+        "label": "40620A",
+        "day": 4,
+        "start_period": 2,
+        "end_period": 4,
+        "room": "電708(承曦樓)",
+        "class_code": "40620A"
+      },
+      {
+        "course": "40626010",
+        "label": "40620A",
+        "day": 4,
+        "start_period": 5,
+        "end_period": 7,
+        "room": "電708(承曦樓)",
+        "class_code": "40620A"
+      },
+      {
+        "course": "90319000",
+        "label": "40620A",
+        "day": 4,
+        "start_period": 8,
+        "end_period": 9,
+        "room": "待排教室",
+        "class_code": "40620A"
+      },
+      {
+        "course": "40625200",
+        "label": "40620A",
+        "day": 5,
+        "start_period": 2,
+        "end_period": 4,
+        "room": "藝409",
+        "class_code": "40620A"
+      },
+      {
+        "course": "40627440",
+        "label": "40620A",
+        "day": 5,
+        "start_period": 5,
+        "end_period": 7,
+        "room": "資401",
+        "class_code": "40620A"
+      },
+      {
+        "course": "40037270",
+        "label": "40630B",
+        "day": 2,
+        "start_period": 7,
+        "end_period": 8,
+        "room": "音樂廳",
+        "class_code": "40630B"
+      },
+      {
+        "course": "40635210",
+        "label": "40630B",
+        "day": 3,
+        "start_period": 5,
+        "end_period": 7,
+        "room": "電703(承曦樓)",
+        "class_code": "40630B"
+      },
+      {
+        "course": "40037250",
+        "label": "40630B",
+        "day": 4,
+        "start_period": 5,
+        "end_period": 6,
+        "room": "藝409",
+        "class_code": "40630B"
+      },
+      {
+        "course": "40630991",
+        "label": "40630B",
+        "day": 4,
+        "start_period": 7,
+        "end_period": 8,
+        "room": "體育館",
+        "class_code": "40630B"
+      },
+      {
+        "course": "40636390",
+        "label": "40630B",
+        "day": 5,
+        "start_period": 5,
+        "end_period": 7,
+        "room": "電607(承曦樓)",
+        "class_code": "40630B"
+      }
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+{# 北商 Logo：目前用公開縮圖 URL。若無法載入則顯示佔位 SVG。請替換為官方 Logo。 #}
+<a class="brand{% if compact %} header-brand{% endif %}" href="{% url 'course_list' %}">
+  <img class="brand-logo" src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQNHcF3saCeC7JpXSqn3E65JZe--Vk8eVrKvj0SeArZhg&s=10" width="32" height="32" alt="" onerror="this.style.display='none'; this.nextElementSibling.hidden=false;">
+  {# 請替換為官方 Logo：國立臺北商業大學 #}
+  <svg class="brand-fallback" width="32" height="32" viewBox="0 0 32 32" aria-hidden="true" hidden>
+    <rect width="32" height="32" rx="8" fill="var(--primary-50)"/>
+    <path d="M8 22V10h2.2l5.8 8.4L21.8 10H24v12h-2.1v-8.2L16.4 22h-1.3L10.1 13.8V22H8z" fill="var(--primary-700)"/>
+  </svg>
+  <span class="brand-text">
+    <span class="brand-kicker">NTUB</span>
+    <span class="brand-name">選課系統</span>
+  </span>
+</a>

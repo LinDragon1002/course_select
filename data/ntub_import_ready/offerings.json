@@ -1,0 +1,723 @@
+{
+  "schema_version": "1.0",
+  "generated_by": "manage.py prepare_ntub_offerings",
+  "generated_at": "2026-10-30T00:33:09+00:00",
+  "source": {
+    "offerings_dir": "C:\\Users\\user\\OneDrive\\Desktop\\course_select\\coursepuzzle-main\\data\\ntub_offerings",
+    "curriculum_file": "C:\\Users\\user\\OneDrive\\Desktop\\course_select\\coursepuzzle-main\\data\\ntub_curriculum_electives.json",
+    "schedule_source_url": "https://ntcbadm.ntub.edu.tw/pub/TchSchedule_Search.aspx",
+    "source_files": [
+      "115-1_伺服器架設與規劃.json",
+      "115-1_數位內容概論.json",
+      "115-1_網站應用程式設計.json",
+      "115-1_財務管理.json",
+      "115-1_資管個案研討.json"
+    ],
+    "skipped_files": [],
+    "keywords": [
+      "伺服器架設與規劃",
+      "數位內容概論",
+      "網站應用程式設計",
+      "財務管理",
+      "資管個案研討"
+    ],
+    "retrieved_at_min": "2026-10-29T02:34:03.503880+00:00",
+    "retrieved_at_max": "2026-10-29T02:36:16.655247+00:00",
+    "rescraped": false
+  },
+  "policy": {
+    "official_capacity": "校方公告名額（cap），可作為匯入時 Section.capacity 的初始值；本地額滿與選課人數仍以本系統的加選紀錄為準。",
+    "official_enrolled": "校方公告的已選人數，僅作歷史來源資料；本地選課人數由 Enrollment 統計獨立計算。",
+    "local_enrollment": "本地選課人數一律以本系統的加選紀錄統計，與 official_enrolled 無關。",
+    "dedup_key": [
+      "academic_year",
+      "semester",
+      "class_code",
+      "serial",
+      "course_code"
+    ],
+    "recommendation_match": "課綱推薦以「課名完全相同」對應到官方開課；班級代碼相同為完全對應（matched），班級代碼不同仍連結同一門課但標記為 course_name_only 並列為疑義。近似課名（例如「財務管理(二)(技優領航專班)」與「財務管理」）視為不同課程，互不取代。"
+  },
+  "stats": {
+    "source_files": 5,
+    "keywords": 5,
+    "raw_offerings": 6,
+    "unique_offerings": 6,
+    "duplicates_merged": 0,
+    "curriculum_recommendations": 6,
+    "recommendations_matched": 3,
+    "recommendations_linked_other_class": 3,
+    "recommendations_unlinked": 0,
+    "ambiguities": 5
+  },
+  "offerings": [
+    {
+      "key": "115|1|40620A|15|40627440",
+      "academic_year": "115",
+      "semester": "1",
+      "term_code": "115-1",
+      "class_code": "40620A",
+      "class_name": "四技資管二年甲班",
+      "serial": "15",
+      "course_code": "40627440",
+      "course_name": "數位內容概論",
+      "teacher": {
+        "id": "1142",
+        "name": "蕭培元",
+        "raw": "1142 蕭培元"
+      },
+      "schedule": {
+        "weekday": 5,
+        "weekday_label": "週五",
+        "periods": [
+          5,
+          6,
+          7
+        ],
+        "start_period": 5,
+        "end_period": 7,
+        "raw": "505 506 507/A1401 資401"
+      },
+      "classroom": {
+        "code": "A1401",
+        "name": "A1401 資401",
+        "raw": "505 506 507/A1401 資401"
+      },
+      "credits": 3.0,
+      "credits_raw": "3.0",
+      "hours": 3.0,
+      "hours_raw": "3.0",
+      "category": "專選",
+      "elective_category": "專選",
+      "official_capacity": 48,
+      "official_enrolled": 37,
+      "official_capacity_raw": "48/37",
+      "capacity_is_historical_only": true,
+      "notes": [],
+      "matched_keywords": [
+        "數位內容概論"
+      ],
+      "source": {
+        "file": "115-1_數位內容概論.json",
+        "keyword": "數位內容概論",
+        "source_url": "https://ntcbadm.ntub.edu.tw/pub/TchSchedule_Search.aspx",
+        "retrieved_at": "2026-10-29T02:34:20.518776+00:00",
+        "exported_at": "2026-10-29T02:34:20.518776+00:00",
+        "files": [
+          "115-1_數位內容概論.json"
+        ]
+      },
+      "django": {
+        "term_code": "115-1",
+        "course_code": "40627440",
+        "course_name": "數位內容概論",
+        "teacher_name": "蕭培元",
+        "credits": 3,
+        "section_label": "A",
+        "day": 5,
+        "start_period": 5,
+        "end_period": 7,
+        "room": "A1401",
+        "classroom_name": "A1401 資401",
+        "capacity": 48,
+        "official_capacity": 48,
+        "official_enrolled": 37,
+        "capacity_source": "official_quota"
+      }
+    },
+    {
+      "key": "115|1|40620A|19|40627960",
+      "academic_year": "115",
+      "semester": "1",
+      "term_code": "115-1",
+      "class_code": "40620A",
+      "class_name": "四技資管二年甲班",
+      "serial": "19",
+      "course_code": "40627960",
+      "course_name": "網站應用程式設計",
+      "teacher": {
+        "id": "1683",
+        "name": "林俊杰",
+        "raw": "1683 林俊杰"
+      },
+      "schedule": {
+        "weekday": 4,
+        "weekday_label": "週四",
+        "periods": [
+          2,
+          3,
+          4
+        ],
+        "start_period": 2,
+        "end_period": 4,
+        "raw": "402 403 404/A4708 電708(承曦樓)"
+      },
+      "classroom": {
+        "code": "A4708",
+        "name": "A4708 電708(承曦樓)",
+        "raw": "402 403 404/A4708 電708(承曦樓)"
+      },
+      "credits": 3.0,
+      "credits_raw": "3.0",
+      "hours": 3.0,
+      "hours_raw": "3.0",
+      "category": "專選",
+      "elective_category": "專選",
+      "official_capacity": 51,
+      "official_enrolled": 51,
+      "official_capacity_raw": "51/51",
+      "capacity_is_historical_only": true,
+      "notes": [],
+      "matched_keywords": [
+        "網站應用程式設計"
+      ],
+      "source": {
+        "file": "115-1_網站應用程式設計.json",
+        "keyword": "網站應用程式設計",
+        "source_url": "https://ntcbadm.ntub.edu.tw/pub/TchSchedule_Search.aspx",
+        "retrieved_at": "2026-10-29T02:34:03.503880+00:00",
+        "exported_at": "2026-10-29T02:34:03.503880+00:00",
+        "files": [
+          "115-1_網站應用程式設計.json"
+        ]
+      },
+      "django": {
+        "term_code": "115-1",
+        "course_code": "40627960",
+        "course_name": "網站應用程式設計",
+        "teacher_name": "林俊杰",
+        "credits": 3,
+        "section_label": "A",
+        "day": 4,
+        "start_period": 2,
+        "end_period": 4,
+        "room": "A4708",
+        "classroom_name": "A4708 電708(承曦樓)",
+        "capacity": 51,
+        "official_capacity": 51,
+        "official_enrolled": 51,
+        "capacity_source": "official_quota"
+      }
+    },
+    {
+      "key": "115|1|40620A|21|40624660",
+      "academic_year": "115",
+      "semester": "1",
+      "term_code": "115-1",
+      "class_code": "40620A",
+      "class_name": "四技資管二年甲班",
+      "serial": "21",
+      "course_code": "40624660",
+      "course_name": "財務管理",
+      "teacher": {
+        "id": "0249",
+        "name": "賴蓉禾",
+        "raw": "0249 賴蓉禾"
+      },
+      "schedule": {
+        "weekday": 1,
+        "weekday_label": "週一",
+        "periods": [
+          5,
+          6,
+          7
+        ],
+        "start_period": 5,
+        "end_period": 7,
+        "raw": "105 106 107/A4607 電607(承曦樓)"
+      },
+      "classroom": {
+        "code": "A4607",
+        "name": "A4607 電607(承曦樓)",
+        "raw": "105 106 107/A4607 電607(承曦樓)"
+      },
+      "credits": 3.0,
+      "credits_raw": "3.0",
+      "hours": 3.0,
+      "hours_raw": "3.0",
+      "category": "專選",
+      "elective_category": "專選",
+      "official_capacity": 46,
+      "official_enrolled": 33,
+      "official_capacity_raw": "46/33",
+      "capacity_is_historical_only": true,
+      "notes": [],
+      "matched_keywords": [
+        "財務管理"
+      ],
+      "source": {
+        "file": "115-1_財務管理.json",
+        "keyword": "財務管理",
+        "source_url": "https://ntcbadm.ntub.edu.tw/pub/TchSchedule_Search.aspx",
+        "retrieved_at": "2026-10-29T02:36:16.655247+00:00",
+        "exported_at": "2026-10-29T02:36:16.655247+00:00",
+        "files": [
+          "115-1_財務管理.json"
+        ]
+      },
+      "django": {
+        "term_code": "115-1",
+        "course_code": "40624660",
+        "course_name": "財務管理",
+        "teacher_name": "賴蓉禾",
+        "credits": 3,
+        "section_label": "A",
+        "day": 1,
+        "start_period": 5,
+        "end_period": 7,
+        "room": "A4607",
+        "classroom_name": "A4607 電607(承曦樓)",
+        "capacity": 46,
+        "official_capacity": 46,
+        "official_enrolled": 33,
+        "capacity_source": "official_quota"
+      }
+    },
+    {
+      "key": "115|1|40620B|13|40624670",
+      "academic_year": "115",
+      "semester": "1",
+      "term_code": "115-1",
+      "class_code": "40620B",
+      "class_name": "四技資管二年乙班",
+      "serial": "13",
+      "course_code": "40624670",
+      "course_name": "財務管理(二)(技優領航專班)",
+      "teacher": {
+        "id": "0161",
+        "name": "許慶文",
+        "raw": "0161 許慶文"
+      },
+      "schedule": {
+        "weekday": 1,
+        "weekday_label": "週一",
+        "periods": [
+          5,
+          6,
+          7
+        ],
+        "start_period": 5,
+        "end_period": 7,
+        "raw": "105 106 107/A6410 藝410"
+      },
+      "classroom": {
+        "code": "A6410",
+        "name": "A6410 藝410",
+        "raw": "105 106 107/A6410 藝410"
+      },
+      "credits": 3.0,
+      "credits_raw": "3.0",
+      "hours": 3.0,
+      "hours_raw": "3.0",
+      "category": "專選",
+      "elective_category": "專選",
+      "official_capacity": 42,
+      "official_enrolled": 22,
+      "official_capacity_raw": "42/22",
+      "capacity_is_historical_only": true,
+      "notes": [],
+      "matched_keywords": [
+        "財務管理"
+      ],
+      "source": {
+        "file": "115-1_財務管理.json",
+        "keyword": "財務管理",
+        "source_url": "https://ntcbadm.ntub.edu.tw/pub/TchSchedule_Search.aspx",
+        "retrieved_at": "2026-10-29T02:36:16.655247+00:00",
+        "exported_at": "2026-10-29T02:36:16.655247+00:00",
+        "files": [
+          "115-1_財務管理.json"
+        ]
+      },
+      "django": {
+        "term_code": "115-1",
+        "course_code": "40624670",
+        "course_name": "財務管理(二)(技優領航專班)",
+        "teacher_name": "許慶文",
+        "credits": 3,
+        "section_label": "B",
+        "day": 1,
+        "start_period": 5,
+        "end_period": 7,
+        "room": "A6410",
+        "classroom_name": "A6410 藝410",
+        "capacity": 42,
+        "official_capacity": 42,
+        "official_enrolled": 22,
+        "capacity_source": "official_quota"
+      }
+    },
+    {
+      "key": "115|1|40630A|20|40637100",
+      "academic_year": "115",
+      "semester": "1",
+      "term_code": "115-1",
+      "class_code": "40630A",
+      "class_name": "四技資管三年甲班",
+      "serial": "20",
+      "course_code": "40637100",
+      "course_name": "伺服器架設與規劃",
+      "teacher": {
+        "id": "0370",
+        "name": "楊進雄",
+        "raw": "0370 楊進雄"
+      },
+      "schedule": {
+        "weekday": 1,
+        "weekday_label": "週一",
+        "periods": [
+          5,
+          6,
+          7
+        ],
+        "start_period": 5,
+        "end_period": 7,
+        "raw": "105 106 107/A4707 電707(承曦樓)"
+      },
+      "classroom": {
+        "code": "A4707",
+        "name": "A4707 電707(承曦樓)",
+        "raw": "105 106 107/A4707 電707(承曦樓)"
+      },
+      "credits": 3.0,
+      "credits_raw": "3.0",
+      "hours": 3.0,
+      "hours_raw": "3.0",
+      "category": "專選",
+      "elective_category": "專選",
+      "official_capacity": 50,
+      "official_enrolled": 50,
+      "official_capacity_raw": "50/50",
+      "capacity_is_historical_only": true,
+      "notes": [],
+      "matched_keywords": [
+        "伺服器架設與規劃"
+      ],
+      "source": {
+        "file": "115-1_伺服器架設與規劃.json",
+        "keyword": "伺服器架設與規劃",
+        "source_url": "https://ntcbadm.ntub.edu.tw/pub/TchSchedule_Search.aspx",
+        "retrieved_at": "2026-10-29T02:34:15.176550+00:00",
+        "exported_at": "2026-10-29T02:34:15.176550+00:00",
+        "files": [
+          "115-1_伺服器架設與規劃.json"
+        ]
+      },
+      "django": {
+        "term_code": "115-1",
+        "course_code": "40637100",
+        "course_name": "伺服器架設與規劃",
+        "teacher_name": "楊進雄",
+        "credits": 3,
+        "section_label": "A",
+        "day": 1,
+        "start_period": 5,
+        "end_period": 7,
+        "room": "A4707",
+        "classroom_name": "A4707 電707(承曦樓)",
+        "capacity": 50,
+        "official_capacity": 50,
+        "official_enrolled": 50,
+        "capacity_source": "official_quota"
+      }
+    },
+    {
+      "key": "115|1|40630A|21|40635420",
+      "academic_year": "115",
+      "semester": "1",
+      "term_code": "115-1",
+      "class_code": "40630A",
+      "class_name": "四技資管三年甲班",
+      "serial": "21",
+      "course_code": "40635420",
+      "course_name": "資管個案研討",
+      "teacher": {
+        "id": "1900",
+        "name": "林育志",
+        "raw": "1900 林育志"
+      },
+      "schedule": {
+        "weekday": 2,
+        "weekday_label": "週二",
+        "periods": [
+          2,
+          3,
+          4
+        ],
+        "start_period": 2,
+        "end_period": 4,
+        "raw": "202 203 204/A6403 藝403"
+      },
+      "classroom": {
+        "code": "A6403",
+        "name": "A6403 藝403",
+        "raw": "202 203 204/A6403 藝403"
+      },
+      "credits": 3.0,
+      "credits_raw": "3.0",
+      "hours": 3.0,
+      "hours_raw": "3.0",
+      "category": "專選",
+      "elective_category": "專選",
+      "official_capacity": 45,
+      "official_enrolled": 42,
+      "official_capacity_raw": "45/42",
+      "capacity_is_historical_only": true,
+      "notes": [],
+      "matched_keywords": [
+        "資管個案研討"
+      ],
+      "source": {
+        "file": "115-1_資管個案研討.json",
+        "keyword": "資管個案研討",
+        "source_url": "https://ntcbadm.ntub.edu.tw/pub/TchSchedule_Search.aspx",
+        "retrieved_at": "2026-10-29T02:34:08.966620+00:00",
+        "exported_at": "2026-10-29T02:34:08.966620+00:00",
+        "files": [
+          "115-1_資管個案研討.json"
+        ]
+      },
+      "django": {
+        "term_code": "115-1",
+        "course_code": "40635420",
+        "course_name": "資管個案研討",
+        "teacher_name": "林育志",
+        "credits": 3,
+        "section_label": "A",
+        "day": 2,
+        "start_period": 2,
+        "end_period": 4,
+        "room": "A6403",
+        "classroom_name": "A6403 藝403",
+        "capacity": 45,
+        "official_capacity": 45,
+        "official_enrolled": 42,
+        "capacity_source": "official_quota"
+      }
+    }
+  ],
+  "curriculum_recommendations": [
+    {
+      "admission_year": "113",
+      "track": "技優領航專班",
+      "program_code": "4",
+      "program_name": "四技日間部",
+      "department_code": "406",
+      "department_name": "資訊管理系",
+      "grade": 3,
+      "semester": 1,
+      "class_code": "40630B",
+      "course_name": "網站應用程式設計",
+      "match_status": "course_name_only",
+      "offering_key": "115|1|40620A|19|40627960",
+      "course_code": "40627960",
+      "matched_course_code": "40627960",
+      "matched_offering_class_code": "40620A",
+      "candidates": [
+        {
+          "offering_key": "115|1|40620A|19|40627960",
+          "course_code": "40627960",
+          "class_code": "40620A",
+          "class_name": "四技資管二年甲班",
+          "course_name": "網站應用程式設計"
+        }
+      ]
+    },
+    {
+      "admission_year": "113",
+      "track": "技優領航專班",
+      "program_code": "4",
+      "program_name": "四技日間部",
+      "department_code": "406",
+      "department_name": "資訊管理系",
+      "grade": 3,
+      "semester": 1,
+      "class_code": "40630B",
+      "course_name": "資管個案研討",
+      "match_status": "course_name_only",
+      "offering_key": "115|1|40630A|21|40635420",
+      "course_code": "40635420",
+      "matched_course_code": "40635420",
+      "matched_offering_class_code": "40630A",
+      "candidates": [
+        {
+          "offering_key": "115|1|40630A|21|40635420",
+          "course_code": "40635420",
+          "class_code": "40630A",
+          "class_name": "四技資管三年甲班",
+          "course_name": "資管個案研討"
+        }
+      ]
+    },
+    {
+      "admission_year": "113",
+      "track": "技優領航專班",
+      "program_code": "4",
+      "program_name": "四技日間部",
+      "department_code": "406",
+      "department_name": "資訊管理系",
+      "grade": 3,
+      "semester": 1,
+      "class_code": "40630B",
+      "course_name": "伺服器架設與規劃",
+      "match_status": "course_name_only",
+      "offering_key": "115|1|40630A|20|40637100",
+      "course_code": "40637100",
+      "matched_course_code": "40637100",
+      "matched_offering_class_code": "40630A",
+      "candidates": [
+        {
+          "offering_key": "115|1|40630A|20|40637100",
+          "course_code": "40637100",
+          "class_code": "40630A",
+          "class_name": "四技資管三年甲班",
+          "course_name": "伺服器架設與規劃"
+        }
+      ]
+    },
+    {
+      "admission_year": "114",
+      "track": "一般四技",
+      "program_code": "4",
+      "program_name": "四技日間部",
+      "department_code": "406",
+      "department_name": "資訊管理系",
+      "grade": 2,
+      "semester": 1,
+      "class_code": "40620A",
+      "course_name": "數位內容概論",
+      "match_status": "matched",
+      "offering_key": "115|1|40620A|15|40627440",
+      "course_code": "40627440",
+      "matched_course_code": "40627440",
+      "matched_offering_class_code": "40620A",
+      "candidates": [
+        {
+          "offering_key": "115|1|40620A|15|40627440",
+          "course_code": "40627440",
+          "class_code": "40620A",
+          "class_name": "四技資管二年甲班",
+          "course_name": "數位內容概論"
+        }
+      ]
+    },
+    {
+      "admission_year": "114",
+      "track": "一般四技",
+      "program_code": "4",
+      "program_name": "四技日間部",
+      "department_code": "406",
+      "department_name": "資訊管理系",
+      "grade": 2,
+      "semester": 1,
+      "class_code": "40620A",
+      "course_name": "財務管理",
+      "match_status": "matched",
+      "offering_key": "115|1|40620A|21|40624660",
+      "course_code": "40624660",
+      "matched_course_code": "40624660",
+      "matched_offering_class_code": "40620A",
+      "candidates": [
+        {
+          "offering_key": "115|1|40620A|21|40624660",
+          "course_code": "40624660",
+          "class_code": "40620A",
+          "class_name": "四技資管二年甲班",
+          "course_name": "財務管理"
+        }
+      ]
+    },
+    {
+      "admission_year": "114",
+      "track": "一般四技",
+      "program_code": "4",
+      "program_name": "四技日間部",
+      "department_code": "406",
+      "department_name": "資訊管理系",
+      "grade": 2,
+      "semester": 1,
+      "class_code": "40620A",
+      "course_name": "網站應用程式設計",
+      "match_status": "matched",
+      "offering_key": "115|1|40620A|19|40627960",
+      "course_code": "40627960",
+      "matched_course_code": "40627960",
+      "matched_offering_class_code": "40620A",
+      "candidates": [
+        {
+          "offering_key": "115|1|40620A|19|40627960",
+          "course_code": "40627960",
+          "class_code": "40620A",
+          "class_name": "四技資管二年甲班",
+          "course_name": "網站應用程式設計"
+        }
+      ]
+    }
+  ],
+  "ambiguities": [
+    {
+      "kind": "recommendation_class_mismatch",
+      "message": "113 技優領航專班 班級 40630B 推薦「網站應用程式設計」，官方開課屬班級 40620A（課號 40627960）；視為同一門課但班別不同，需人工確認。",
+      "admission_year": "113",
+      "track": "技優領航專班",
+      "class_code": "40630B",
+      "course_name": "網站應用程式設計",
+      "candidates": [
+        {
+          "offering_key": "115|1|40620A|19|40627960",
+          "course_code": "40627960",
+          "class_code": "40620A",
+          "class_name": "四技資管二年甲班",
+          "course_name": "網站應用程式設計"
+        }
+      ]
+    },
+    {
+      "kind": "recommendation_class_mismatch",
+      "message": "113 技優領航專班 班級 40630B 推薦「資管個案研討」，官方開課屬班級 40630A（課號 40635420）；視為同一門課但班別不同，需人工確認。",
+      "admission_year": "113",
+      "track": "技優領航專班",
+      "class_code": "40630B",
+      "course_name": "資管個案研討",
+      "candidates": [
+        {
+          "offering_key": "115|1|40630A|21|40635420",
+          "course_code": "40635420",
+          "class_code": "40630A",
+          "class_name": "四技資管三年甲班",
+          "course_name": "資管個案研討"
+        }
+      ]
+    },
+    {
+      "kind": "recommendation_class_mismatch",
+      "message": "113 技優領航專班 班級 40630B 推薦「伺服器架設與規劃」，官方開課屬班級 40630A（課號 40637100）；視為同一門課但班別不同，需人工確認。",
+      "admission_year": "113",
+      "track": "技優領航專班",
+      "class_code": "40630B",
+      "course_name": "伺服器架設與規劃",
+      "candidates": [
+        {
+          "offering_key": "115|1|40630A|20|40637100",
+          "course_code": "40637100",
+          "class_code": "40630A",
+          "class_name": "四技資管三年甲班",
+          "course_name": "伺服器架設與規劃"
+        }
+      ]
+    },
+    {
+      "kind": "offering_without_recommendation",
+      "message": "「財務管理(二)(技優領航專班)」（班級 40620B，課號 40624670）沒有任何課綱推薦指向它；此課與同名近似課為不同課程，匯入時不可互相取代。",
+      "course_name": "財務管理(二)(技優領航專班)",
+      "class_code": "40620B",
+      "course_code": "40624670",
+      "offering_key": "115|1|40620B|13|40624670"
+    },
+    {
+      "kind": "source_partial_keyword_match",
+      "message": "關鍵字「財務管理」命中「財務管理(二)(技優領航專班)」，屬部分比對，已保留",
+      "file": "115-1_財務管理.json"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-<li class="course-row">
+<li{% if in_course_detail %} id="section-{{ s.pk }}"{% endif %} class="course-row{% if in_course_detail %} course-row--detail{% else %} course-row--list{% endif %}">
   <div class="identity">
     {% if in_course_detail %}
       <span class="course-name">{{ s.label_display }}</span>
@@ -6,25 +6,30 @@
       <a class="course-name" href="{% url 'course_detail' s.course.pk %}">{{ s.course.name }}</a>
       <p class="course-meta">{{ s.course.teacher }}</p>
     {% endif %}
+    {% if s.policy_reason %}<p class="policy-flag">未開放加選：{{ s.policy_reason }}</p>{% endif %}
   </div>
   <div class="meta">
     {% if in_course_detail %}
       <span class="c-time">{{ s.time_display }}</span>
       <span class="c-code"><span class="room">{{ s.room|default:"教室未定" }}</span></span>
     {% else %}
-      <span class="c-code">{{ s.course.code }}<span class="room">· {{ s.room|default:"教室未定" }}</span></span>
-      <span class="c-time">{{ s.label_display }} · {{ s.time_display }}</span>
-      <span class="c-credits num">{{ s.course.credits }} 學分</span>
+      <span class="section-code num">{{ s.course.code }} · {{ s.label_display }}</span>
+      <span class="c-time">{{ s.time_display }}</span>
+      <span class="section-room">{{ s.room|default:"教室未定" }}</span>
       {% if s.prereq_list %}<span class="c-prereq">先修：{% for c, done in s.prereq_list %}{{ c.code }}{% if show_prereq_marks %}{% if done %}✓{% else %}<span class="prereq-missing">未修</span>{% endif %}{% endif %}{% if not forloop.last %}、{% endif %}{% endfor %}</span>{% endif %}
     {% endif %}
   </div>
-  <div class="seats">
-    <span class="seats-num num">{{ s.enrolled }}<span class="of"> / {{ s.capacity }}</span></span>
+  {% if not in_course_detail %}<div class="c-credits"><span class="badge badge-credit">{{ s.course.credits }} 學分</span></div>{% endif %}
+  {% widthratio s.enrolled s.capacity 100 as seat_pct %}
+  <div class="seats quota {% if s.is_full or seat_pct|add:0 >= 100 %}quota--full{% elif seat_pct|add:0 >= 70 %}quota--warn{% else %}quota--ok{% endif %}">
+    <span class="seats-num num"><span class="seats-label">已選</span> {{ s.enrolled }}<span class="of"> / {{ s.capacity }}</span></span>
+    <span class="seats-tag">本站模擬</span>
     {% if s.is_full %}<span class="full-flag">額滿</span>{% endif %}
     {% if s.waitlist_count %}<span class="wait-flag">{{ s.waitlist_count }} 人等待</span>{% endif %}
-    <span class="track" aria-hidden="true"><span style="width:{% widthratio s.enrolled s.capacity 100 %}%"></span></span>
+    <span class="track" role="progressbar" aria-label="名額使用率" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{% if s.is_full or seat_pct|add:0 >= 100 %}100{% else %}{{ seat_pct }}{% endif %}"><span style="width:{% if s.is_full or seat_pct|add:0 >= 100 %}100{% else %}{% widthratio s.enrolled s.capacity 100 %}{% endif %}%"></span></span>
   </div>
   <div class="action">
     {% if user.is_authenticated %}{% include "courses/_action.html" with section=s action=s.action next=next wait_position=s.wait_position %}{% endif %}
+    {% if in_course_detail %}<button class="btn btn-ghost detail-row-preview" type="button" data-preview-section data-section-name="{{ s.course.name }} {{ s.label_display }}" data-day="{{ s.day }}" data-start-period="{{ s.start_period }}" data-end-period="{{ s.end_period }}" data-room="{{ s.room|default:'教室未定' }}" data-action="{{ s.action }}" data-time="{{ s.time_display }}">預覽加入課表</button>{% endif %}
   </div>
 </li>

@@ -1,0 +1,1149 @@
+/*!
+ * 專案層級的後台樣式覆寫（配合 templates/admin/base.html 的 AdminLTE 分支）。
+ *
+ * 設計原則
+ * ---------------------------------------------------------------------------
+ * 1. 側邊欄維持深色（<aside data-bs-theme="dark">），主內容區使用乾淨的淺色
+ *    風格；兩者靠邊框與留白區分，不靠大面積深色。
+ * 2. Django Admin 的配色變數（--body-bg / --body-fg / --hairline-color ...）
+ *    是唯一真實來源。Bootstrap（AdminLTE）原本的 --bs-* 變數在後台範圍內
+ *    重新映射到 Django 的變數，避免「外框亮、內容暗」或反過來的割裂感。
+ * 3. 深色模式不另外實作：所有配色都引用 Django 的變數，所以使用者切到
+ *    dark 時自動變暗；淺色模式則是預設且乾淨的樣子。使用者已選的主題
+ *    不會被覆蓋（沒有任何 hardcode 的深色覆寫）。
+ * 4. 所有選擇器都加上 .adminlte-admin 前綴（body 上的 class），只影響後台，
+ *    不會外溢到前台頁面；也避免全域規則破壞 Django Admin 原生功能。
+ *
+ * 變更紀錄
+ * ---------------------------------------------------------------------------
+ * - 對齊 Django 6.1 的 .titles-and-tools 結構，統一標題字級。
+ * - 統一表格、搜尋列（#toolbar）、篩選器（#changelist-filter）、動作列
+ *   （.actions）與按鈕的尺寸、間距與邊框。
+ * - 修正 AdminLTE 亮色下 Django 主題切換圖示（SVG）填色錯誤而看不見的問題。
+ * - 表單欄位改為「標題欄 + 欄位」兩欄格線，修正原本欄位左緣參差不齊。
+ */
+
+/* ==========================================================================
+   1. 主題變數對齊：Bootstrap 變數 → Django Admin 變數
+   ========================================================================== */
+
+.adminlte-admin {
+  /* 字體與字級：與 Django Admin 一致（0.875rem / Segoe UI 系統字體）。 */
+  --bs-body-font-family: var(--font-family-primary);
+  --bs-body-font-size: 0.875rem;
+  --bs-body-line-height: 1.5;
+  --bs-font-sans-serif: var(--font-family-primary);
+
+  /* 表面與文字 */
+  --bs-body-bg: var(--body-bg);
+  --bs-body-color: var(--body-fg);
+  --bs-emphasis-color: var(--body-loud-color);
+  --bs-secondary-color: var(--body-quiet-color);
+  --bs-tertiary-bg: var(--darkened-bg);
+  --bs-secondary-bg: var(--darkened-bg);
+
+  /* 邊框 */
+  --bs-border-color: var(--border-color);
+
+  /* 連結 */
+  --bs-link-color: var(--link-fg);
+  --bs-link-hover-color: var(--link-hover-color);
+}
+
+/* ==========================================================================
+   2. 版面外框：頂欄、麵包屑、內容容器、頁尾
+   ========================================================================== */
+
+.adminlte-admin .app-header {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.adminlte-admin .app-header .nav-link {
+  font-size: 0.875rem;
+  color: var(--body-medium-color);
+  padding-inline: 0.5rem;
+}
+
+.adminlte-admin .app-header .nav-link:hover,
+.adminlte-admin .app-header .nav-link:focus {
+  color: var(--body-loud-color);
+}
+
+/* Django 主題切換按鈕的 SVG 沿用 Django 的 header 配色，在 AdminLTE 的
+   淺色頂欄上會變成「白底白圖」而看不見；改為跟隨文字色。 */
+.adminlte-admin .app-header .theme-toggle svg {
+  fill: currentColor;
+  color: inherit;
+}
+
+/* 麵包屑列 */
+.adminlte-admin .app-content-header {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--body-bg);
+}
+
+.adminlte-admin .app-content-header .breadcrumb {
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.adminlte-admin .app-content-header .breadcrumb-item + .breadcrumb-item::before {
+  color: var(--body-quiet-color);
+}
+
+.adminlte-admin .app-content-header .breadcrumb-item.active {
+  color: var(--body-medium-color);
+}
+
+/* 內容容器：左右留白一致，底部留出空間 */
+.adminlte-admin .app-content {
+  padding: 1rem 0 1.5rem;
+}
+
+.adminlte-admin .app-content > .container-fluid {
+  padding-inline: 1rem;
+}
+
+.adminlte-admin .app-content #content {
+  padding: 0;
+  max-width: 100%;
+}
+
+.adminlte-admin .app-footer {
+  background-color: var(--body-bg);
+  border-top: 1px solid var(--border-color);
+  color: var(--body-quiet-color);
+  font-size: 0.8125rem;
+}
+
+.adminlte-admin .teacher-dashboard {
+  color: var(--body-fg);
+}
+
+.adminlte-admin .teacher-dashboard__heading,
+.adminlte-admin .teacher-dashboard__course-heading,
+.adminlte-admin .teacher-dashboard__section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.adminlte-admin .teacher-dashboard__heading {
+  margin-bottom: 1rem;
+}
+
+.adminlte-admin .teacher-dashboard__heading h1,
+.adminlte-admin .teacher-dashboard__course-heading h2,
+.adminlte-admin .teacher-dashboard__section-heading h3 {
+  margin: 0;
+  color: var(--body-loud-color);
+}
+
+.adminlte-admin .teacher-dashboard__heading p,
+.adminlte-admin .teacher-dashboard__course-heading p {
+  margin: 0.25rem 0 0;
+  color: var(--body-quiet-color);
+}
+
+.adminlte-admin .teacher-dashboard__term-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.adminlte-admin .teacher-dashboard__term-filter label {
+  font-weight: 600;
+}
+
+.adminlte-admin .teacher-dashboard__summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.adminlte-admin .teacher-dashboard__metric,
+.adminlte-admin .teacher-dashboard__course,
+.adminlte-admin .teacher-dashboard__section,
+.adminlte-admin .teacher-dashboard__empty-state {
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  background: var(--body-bg);
+}
+
+.adminlte-admin .teacher-dashboard__metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.9rem 1rem;
+}
+
+.adminlte-admin .teacher-dashboard__metric span,
+.adminlte-admin .teacher-dashboard__refresh-status,
+.adminlte-admin .teacher-dashboard__details dt {
+  color: var(--body-quiet-color);
+  font-size: 0.8125rem;
+}
+
+.adminlte-admin .teacher-dashboard__metric strong {
+  color: var(--body-loud-color);
+  font-size: 1.5rem;
+  line-height: 1.2;
+}
+
+.adminlte-admin .teacher-dashboard__refresh-status {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0.65rem 0 1.25rem;
+}
+
+.adminlte-admin .teacher-dashboard__courses {
+  display: grid;
+  gap: 1rem;
+}
+
+.adminlte-admin .teacher-dashboard__course {
+  padding: 1rem;
+}
+
+.adminlte-admin .teacher-dashboard__course-heading {
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.adminlte-admin .teacher-dashboard__syllabus {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.adminlte-admin .teacher-dashboard__section {
+  padding: 0.85rem;
+  margin-top: 0.65rem;
+  background: var(--darkened-bg);
+}
+
+.adminlte-admin .teacher-dashboard__section-heading {
+  align-items: center;
+}
+
+.adminlte-admin .teacher-dashboard__section-heading h3 {
+  font-size: 1rem;
+}
+
+.adminlte-admin .teacher-dashboard__details {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.adminlte-admin .teacher-dashboard__details div {
+  min-width: 0;
+}
+
+.adminlte-admin .teacher-dashboard__details dt {
+  margin-bottom: 0.15rem;
+}
+
+.adminlte-admin .teacher-dashboard__details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.adminlte-admin .teacher-dashboard__capacity {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.adminlte-admin .teacher-dashboard__progress {
+  flex: 1;
+  height: 0.55rem;
+  overflow: hidden;
+  border-radius: 1rem;
+  background: var(--border-color);
+}
+
+.adminlte-admin .teacher-dashboard__progress span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  transition: width 0.2s ease;
+}
+
+.adminlte-admin .teacher-dashboard__over-capacity {
+  color: var(--error-fg);
+  font-weight: 600;
+}
+
+.adminlte-admin .teacher-dashboard__empty,
+.adminlte-admin .teacher-dashboard__empty-state {
+  padding: 1rem;
+  color: var(--body-quiet-color);
+}
+
+.adminlte-admin .teacher-dashboard__empty-state {
+  text-align: center;
+}
+
+.adminlte-admin .teacher-dashboard__empty-state h2 {
+  color: var(--body-loud-color);
+  font-size: 1.15rem;
+}
+
+.adminlte-admin .teacher-roster__table-wrap {
+  overflow-x: auto;
+  margin-bottom: 0.75rem;
+}
+
+.adminlte-admin .teacher-roster__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.adminlte-admin .teacher-roster__table th,
+.adminlte-admin .teacher-roster__table td {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border-color);
+  text-align: left;
+}
+
+.adminlte-admin .teacher-roster__table th {
+  background: var(--darkened-bg);
+}
+
+.adminlte-admin .teacher-roster__empty {
+  text-align: center !important;
+  color: var(--body-quiet-color);
+}
+
+@media (max-width: 700px) {
+  .adminlte-admin .teacher-dashboard__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .adminlte-admin .teacher-dashboard__details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .adminlte-admin .teacher-dashboard__heading,
+  .adminlte-admin .teacher-dashboard__course-heading {
+    flex-direction: column;
+  }
+
+  .adminlte-admin .teacher-dashboard__refresh-status {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 420px) {
+  .adminlte-admin .teacher-dashboard__term-filter {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .adminlte-admin .teacher-dashboard__term-filter select {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+}
+
+/* ==========================================================================
+   3. 標題與 object-tools
+   ========================================================================== */
+
+.adminlte-admin .app-content #content .titles-and-tools {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.adminlte-admin .app-content #content .titles-and-tools .titles h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--body-loud-color);
+  margin: 0 0 0.25rem;
+}
+
+.adminlte-admin .app-content #content .titles-and-tools .titles h2 {
+  font-size: 1rem;
+  font-weight: 400;
+  color: var(--body-quiet-color);
+  margin: 0;
+}
+
+/* 副標題（content_subtitle）為空時不留空白。 */
+.adminlte-admin .app-content #content .titles-and-tools .titles h2:empty {
+  display: none;
+}
+
+/* object-tools：靠右排列的按鈕列，與 Django 原生胶囊造型一致但統一尺寸。 */
+.adminlte-admin .app-content #content .titles-and-tools .object-tools {
+  align-self: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+}
+
+.adminlte-admin .app-content #content .object-tools li {
+  margin: 0;
+}
+
+.adminlte-admin .app-content #content .object-tools a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.375rem;
+  background-color: var(--darkened-bg);
+  color: var(--body-medium-color);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  line-height: 1.4;
+}
+
+.adminlte-admin .app-content #content .object-tools a:hover,
+.adminlte-admin .app-content #content .object-tools a:focus {
+  background-color: var(--body-bg);
+  color: var(--body-loud-color);
+  border-color: var(--body-quiet-color);
+}
+
+/* ==========================================================================
+   4. 卡片 / 模組：讓 Django 原生區塊與 AdminLTE 外框同��
+   ========================================================================== */
+
+.adminlte-admin #content div.module {
+  background-color: var(--body-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+  margin-bottom: 1.25rem;
+  overflow: hidden;
+}
+
+.adminlte-admin #content div.module h2,
+.adminlte-admin #content div.module caption {
+  background-color: var(--darkened-bg);
+  color: var(--body-medium-color);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.6rem 1rem;
+}
+
+.adminlte-admin #content div.module p,
+.adminlte-admin #content div.module ul,
+.adminlte-admin #content div.module ol {
+  padding-inline: 1rem;
+}
+
+.adminlte-admin #content div.module ul,
+.adminlte-admin #content div.module ol {
+  margin-block: 0.75rem;
+}
+
+.adminlte-admin #content div.module li {
+  line-height: 1.5;
+}
+
+/* Django 原生清單（儀表板模組、近期動作…）與 AdminLTE 的清單樣式一致：
+   去掉方形 project符號，改用較輕的圓點與一致縮排。 */
+.adminlte-admin #content div.module ul li {
+  list-style-type: disc;
+  margin-bottom: 0.25rem;
+}
+
+.adminlte-admin #content div.module ul li:last-child {
+  margin-bottom: 0;
+}
+
+.adminlte-admin #content div.module h3 {
+  font-size: 0.8125rem;
+  color: var(--body-medium-color);
+}
+
+/* 表單用的 fieldset.module（不是卡片語意，只補齊邊框與圓角） */
+.adminlte-admin #content fieldset.module {
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+/* ==========================================================================
+   5. 表格
+   ========================================================================== */
+
+.adminlte-admin #content table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.adminlte-admin #content table thead th {
+  background-color: var(--darkened-bg);
+  border-top: none;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--body-quiet-color);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.6rem 0.75rem;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.adminlte-admin #content table thead th a,
+.adminlte-admin #content table thead th a:link,
+.adminlte-admin #content table thead th a:visited {
+  color: var(--body-quiet-color);
+}
+
+.adminlte-admin #content table thead th.sorted {
+  background-color: var(--selected-bg);
+}
+
+.adminlte-admin #content table tbody td {
+  border-bottom: 1px solid var(--hairline-color);
+  padding: 0.65rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  vertical-align: middle;
+}
+
+.adminlte-admin #content table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.adminlte-admin #content table tbody tr:hover {
+  background-color: var(--darkened-bg);
+}
+
+/* 勾選欄與動作欄置中，數字欄靠右 */
+.adminlte-admin #content table th.action-checkbox-column,
+.adminlte-admin #content table td.action-checkbox {
+  text-align: center;
+  width: 2.25rem;
+  padding-inline: 0.35rem;
+}
+
+.adminlte-admin #content table td.actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.adminlte-admin #content table td.field-name,
+.adminlte-admin #content table th.field-name {
+  white-space: nowrap;
+}
+
+/* 表格內的動作連結：統一大小與間距 */
+.adminlte-admin #content table td a.addlink,
+.adminlte-admin #content table td a.changelink,
+.adminlte-admin #content table td a.viewlink,
+.adminlte-admin #content table td a.deletelink,
+.adminlte-admin #content table td a.inlineviewlink,
+.adminlte-admin #content table td a.hidelink {
+  font-size: 0.8125rem;
+  margin-left: 0.5rem;
+}
+
+.adminlte-admin #content table td a.addlink:first-child,
+.adminlte-admin #content table td a.changelink:first-child,
+.adminlte-admin #content table td a.viewlink:first-child,
+.adminlte-admin #content table td a.deletelink:first-child {
+  margin-left: 0;
+}
+
+/* ==========================================================================
+   6. 搜尋列（#toolbar）
+   ========================================================================== */
+
+.adminlte-admin #content #toolbar {
+  background-color: var(--body-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  color: var(--body-quiet-color);
+}
+
+.adminlte-admin #content #toolbar form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.adminlte-admin #content #toolbar #changelist-search > div {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 320px;
+  max-width: 640px;
+}
+
+.adminlte-admin #content #toolbar #changelist-search label {
+  line-height: 1;
+  margin: 0;
+}
+
+.adminlte-admin #content #toolbar #searchbar {
+  flex: 1 1 auto;
+  width: auto;
+  max-width: 100%;
+  height: 2.25rem;
+  padding: 0 0.6rem;
+  margin: 0;
+  font-size: 0.875rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.375rem;
+  background-color: var(--body-bg);
+  color: var(--body-fg);
+}
+
+.adminlte-admin #content #toolbar #searchbar:focus {
+  border-color: var(--body-quiet-color);
+  outline: 2px solid var(--selected-bg);
+  outline-offset: 1px;
+}
+
+.adminlte-admin #content #toolbar .small.quiet {
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   7. 篩選器（#changelist-filter）
+   ========================================================================== */
+
+.adminlte-admin #content #changelist-filter {
+  background-color: var(--body-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  padding-bottom: 0.5rem;
+  overflow: hidden;
+}
+
+.adminlte-admin #content #changelist-filter h2 {
+  background-color: var(--darkened-bg);
+  border-bottom: 1px solid var(--border-color);
+  color: var(--body-medium-color);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.6rem 0.9rem;
+  margin: 0 0 0.75rem;
+}
+
+.adminlte-admin #content #changelist-filter h3,
+.adminlte-admin #content #changelist-filter details summary {
+  padding: 0 0.9rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.adminlte-admin #content #changelist-filter ul {
+  margin: 0;
+  padding: 0 0.9rem 0.75rem;
+  border-bottom: none;
+}
+
+.adminlte-admin #content #changelist-filter li {
+  margin-bottom: 0.2rem;
+}
+
+.adminlte-admin #content #changelist-filter li.selected {
+  border-left: 3px solid var(--link-selected-fg);
+  padding-left: 0.5rem;
+  margin-left: 0;
+}
+
+.adminlte-admin #content #changelist-filter #changelist-filter-extra-actions {
+  margin: 0 0 0.75rem;
+  padding: 0 0.9rem;
+  border-bottom: 1px solid var(--hairline-color);
+  font-size: 0.8125rem;
+}
+
+/* ==========================================================================
+   8. 動作列（.actions）與按鈕
+   ========================================================================== */
+
+.adminlte-admin #content .actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 1rem;
+  background-color: var(--body-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  color: var(--body-quiet-color);
+}
+
+.adminlte-admin #content .actions label {
+  font-size: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.adminlte-admin #content .actions select {
+  height: 2.25rem;
+  margin: 0;
+  padding: 0 0.5rem;
+  font-size: 0.875rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.375rem;
+  background-color: var(--body-bg);
+  color: var(--body-fg);
+}
+
+.adminlte-admin #content .actions .button,
+.adminlte-admin #content .actions button {
+  height: 2.25rem;
+  line-height: 1;
+  margin: 0;
+  padding: 0 0.9rem;
+  font-size: 0.875rem;
+  border-radius: 0.375rem;
+}
+
+/* 全域按鈕尺寸統一（僅限後台範圍） */
+.adminlte-admin #content .button,
+.adminlte-admin #content input[type="submit"],
+.adminlte-admin #content input[type="button"],
+.adminlte-admin #content a.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.25rem;
+  padding: 0 0.9rem;
+  font-size: 0.875rem;
+  line-height: 1.2;
+  border-radius: 0.375rem;
+  border: 1px solid transparent;
+  background-color: var(--button-bg);
+  color: var(--button-fg);
+  text-align: center;
+}
+
+.adminlte-admin #content .button:hover,
+.adminlte-admin #content input[type="submit"]:hover,
+.adminlte-admin #content input[type="button"]:hover,
+.adminlte-admin #content a.button:hover {
+  background-color: var(--button-hover-bg);
+}
+
+/* 儲存 / 主要動作按鈕 */
+.adminlte-admin #content .button.default,
+.adminlte-admin #content input[type="submit"].default,
+.adminlte-admin #content .submit-row input.default {
+  background-color: var(--default-button-bg);
+  font-weight: 600;
+}
+
+.adminlte-admin #content .button.default:hover,
+.adminlte-admin #content input[type="submit"].default:hover {
+  background-color: var(--default-button-hover-bg);
+}
+
+/* 送出列 */
+.adminlte-admin #content .submit-row {
+  background-color: var(--body-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  padding: 0.9rem 1rem;
+  gap: 0.6rem;
+}
+
+.adminlte-admin #content .submit-row input,
+.adminlte-admin #content .submit-row a {
+  font-size: 0.875rem;
+  border-radius: 0.375rem;
+}
+
+.adminlte-admin #content .submit-row input {
+  min-height: 2.25rem;
+  padding: 0 1rem;
+}
+
+.adminlte-admin #content .submit-row a.deletelink,
+.adminlte-admin #content .submit-row a.closelink {
+  border-radius: 0.375rem;
+}
+
+/* 分頁 */
+.adminlte-admin #content .paginator {
+  font-size: 0.8125rem;
+  color: var(--body-quiet-color);
+}
+
+.adminlte-admin #content .paginator a:not([aria-current="page"]):not(.showall) {
+  border-radius: 0.3rem;
+  font-size: 0.8125rem;
+  padding: 0.2rem 0.55rem;
+}
+
+.adminlte-admin #content .paginator a[aria-current="page"] {
+  font-size: 0.8125rem;
+}
+
+/* ==========================================================================
+   9. 表單欄位對齊（label 欄 + 欄位欄）
+   ========================================================================== */
+
+.adminlte-admin #content .aligned:not(.inline-related) .form-row > .flex-container {
+  display: grid;
+  grid-template-columns: 12rem minmax(0, 1fr);
+  align-items: start;
+  gap: 0.35rem 1rem;
+}
+
+.adminlte-admin #content .aligned:not(.inline-related) .form-row > .flex-container > label {
+  grid-column: 1;
+  grid-row: 1;
+  padding-top: 0.4rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--body-medium-color);
+}
+
+.adminlte-admin #content .aligned:not(.inline-related) .form-row > .flex-container > input,
+.adminlte-admin #content .aligned:not(.inline-related) .form-row > .flex-container > select,
+.adminlte-admin #content .aligned:not(.inline-related) .form-row > .flex-container > textarea,
+.adminlte-admin #content .aligned:not(.inline-related) .form-row > .flex-container > .readonly,
+.adminlte-admin #content .aligned:not(.inline-related) .form-row > .flex-container > .related-widget-wrapper,
+.adminlte-admin #content .aligned:not(.inline-related) .form-row > .flex-container > .datetime,
+.adminlte-admin #content .aligned:not(.inline-related) .form-row > .flex-container > ul.radiolist {
+  grid-column: 2;
+  grid-row: 1;
+  width: 100%;
+  max-width: 40rem;
+}
+
+.adminlte-admin #content .aligned:not(.inline-related) .form-row > .flex-container > .help {
+  grid-column: 2;
+  grid-row: 2;
+  font-size: 0.75rem;
+  color: var(--body-quiet-color);
+}
+
+.adminlte-admin #content .aligned:not(.inline-related) .form-row > .flex-container > ul.errorlist {
+  grid-column: 2;
+  grid-row: 3;
+  font-size: 0.75rem;
+}
+
+.adminlte-admin #content .aligned:not(.inline-related) .form-row > .flex-container.checkbox-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  grid-column: 1 / -1;
+}
+
+/* 表單控制項尺寸統一 */
+.adminlte-admin #content input[type="text"],
+.adminlte-admin #content input[type="password"],
+.adminlte-admin #content input[type="email"],
+.adminlte-admin #content input[type="url"],
+.adminlte-admin #content input[type="number"],
+.adminlte-admin #content input[type="tel"],
+.adminlte-admin #content input:not([type]),
+.adminlte-admin #content select,
+.adminlte-admin #content textarea {
+  font-size: 0.875rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 0.375rem;
+}
+
+.adminlte-admin #content select {
+  height: 2.25rem;
+}
+
+.adminlte-admin #content select[multiple] {
+  height: auto;
+}
+
+.adminlte-admin #content .fieldset-heading,
+.adminlte-admin #content fieldset.module h2 {
+  background-color: var(--darkened-bg);
+  color: var(--body-medium-color);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.adminlte-admin #content .inline-group fieldset.collapse {
+  display: block !important;
+}
+
+.adminlte-admin #content .inline-group fieldset.collapse > details > summary {
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   10. 訊息與錯誤提示
+   ========================================================================== */
+
+.adminlte-admin ul.messagelist {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.adminlte-admin ul.messagelist li {
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border-color);
+  background: var(--darkened-bg);
+  color: var(--body-fg);
+  font-size: 0.875rem;
+}
+
+.adminlte-admin ul.messagelist li.success {
+  background: var(--message-success-bg);
+  color: var(--body-loud-color);
+  border-color: var(--message-success-bg);
+}
+
+.adminlte-admin ul.messagelist li.warning {
+  background: var(--message-warning-bg);
+  color: var(--body-loud-color);
+  border-color: var(--message-warning-bg);
+}
+
+.adminlte-admin ul.messagelist li.error {
+  background: var(--message-error-bg);
+  color: var(--body-loud-color);
+  border-color: var(--message-error-bg);
+}
+
+.adminlte-admin #content .errornote {
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  background-color: var(--body-bg);
+}
+
+/* ==========================================================================
+   11. 響應式
+   ========================================================================== */
+
+@media (max-width: 1199.98px) {
+  .adminlte-admin .app-content > .container-fluid {
+    padding-inline: 0.75rem;
+  }
+}
+
+@media (max-width: 991.98px) {
+  /* 側邊欄收起時，內容區要留出足夠高度 */
+  .adminlte-admin .app-content {
+    padding-top: 0.75rem;
+  }
+
+  .adminlte-admin .app-content #content .titles-and-tools {
+    margin-bottom: 1rem;
+  }
+
+  .adminlte-admin #content #changelist-filter {
+    margin-top: 1rem;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .adminlte-admin .app-content > .container-fluid {
+    padding-inline: 0.5rem;
+  }
+
+  .adminlte-admin .app-content #content .titles-and-tools {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .adminlte-admin .app-content #content .object-tools {
+    align-self: stretch;
+  }
+
+  .adminlte-admin .app-content #content .object-tools a {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  /* 搜尋列改為直向堆疊 */
+  .adminlte-admin #content #toolbar,
+  .adminlte-admin #content #toolbar form,
+  .adminlte-admin #content #toolbar #changelist-search > div {
+    flex-direction: column;
+    align-items: stretch;
+    max-width: 100%;
+  }
+
+  .adminlte-admin #content #toolbar #searchbar {
+    width: 100%;
+    flex: 1 1 auto;
+  }
+
+  .adminlte-admin #content #toolbar #changelist-search label {
+    display: none;
+  }
+
+  /* 動作列改為直向堆疊 */
+  .adminlte-admin #content .actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .adminlte-admin #content .actions label,
+  .adminlte-admin #content .actions select,
+  .adminlte-admin #content .actions .button {
+    width: 100%;
+  }
+
+  /* 表單回到單欄（沿用 Django 原生的手機版堆疊） */
+  .adminlte-admin #content .aligned:not(.inline-related) .form-row > .flex-container {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.35rem;
+  }
+
+  .adminlte-admin #content .aligned:not(.inline-related) .form-row > .flex-container > label {
+    padding-top: 0;
+  }
+
+  /* 表格可橫向捲動，不撐破版面 */
+  .adminlte-admin #content #changelist-form .results,
+  .adminlte-admin #content .fixed-schedule-entry-results,
+  .adminlte-admin #content .inline-related.tabular div.wrapper {
+    overflow-x: auto;
+  }
+}
+
+.adminlte-admin .fixed-schedule-grid-wrap {
+  overflow-x: auto;
+  margin: 1rem 0;
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+}
+
+.adminlte-admin .fixed-schedule-row-action {
+  display: inline;
+}
+
+.adminlte-admin .fixed-schedule-row-action button {
+  padding: 0;
+  border: 0;
+  color: var(--link-fg);
+  background: transparent;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.adminlte-admin .fixed-schedule-grid {
+  min-width: 760px;
+}
+
+.adminlte-admin .fixed-schedule-grid__head {
+  display: grid;
+  grid-template-columns: 3rem repeat(7, minmax(0, 1fr));
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.adminlte-admin .fixed-schedule-grid__corner,
+.adminlte-admin .fixed-schedule-grid__day {
+  padding: 0.5rem 0.25rem;
+  text-align: center;
+  font-weight: 600;
+  background: var(--darkened-bg);
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.adminlte-admin .fixed-schedule-grid__body {
+  display: grid;
+  grid-template-columns: 3rem repeat(7, minmax(0, 1fr));
+  grid-template-rows: repeat(var(--periods), 3.75rem);
+  min-height: calc(var(--periods) * 3.75rem);
+}
+
+.adminlte-admin .fixed-schedule-grid__times {
+  grid-column: 1;
+  display: grid;
+  grid-template-rows: repeat(var(--periods), 3.75rem);
+}
+
+.adminlte-admin .fixed-schedule-grid__times div {
+  display: grid;
+  place-items: center;
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  color: var(--body-quiet-color);
+}
+
+.adminlte-admin .fixed-schedule-grid__column {
+  display: grid;
+  grid-template-rows: repeat(var(--periods), 3.75rem);
+  position: relative;
+  border-right: 1px solid var(--border-color);
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(3.75rem - 1px),
+    var(--border-color) calc(3.75rem - 1px),
+    var(--border-color) 3.75rem
+  );
+}
+
+.adminlte-admin .fixed-schedule-grid__item {
+  position: absolute;
+  top: calc(var(--top) * 3.75rem + 0.12rem);
+  left: calc(var(--left) + 0.12rem);
+  width: calc(var(--width) - 0.24rem);
+  height: calc(var(--span) * 3.75rem - 0.24rem);
+  overflow: hidden;
+  padding: 0.25rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.3rem;
+  background: var(--selected-bg);
+  font-size: 0.68rem;
+  line-height: 1.25;
+}
+
+.adminlte-admin .fixed-schedule-grid__item--activity {
+  background: var(--darkened-bg);
+}
+
+.adminlte-admin .fixed-schedule-grid__item span,
+.adminlte-admin .fixed-schedule-grid__item strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.adminlte-admin .fixed-schedule-grid-wrap + .help {
+  margin-bottom: 1rem;
+}

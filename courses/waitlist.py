@@ -6,6 +6,7 @@ join／promote_next 一行的程度，頁面讀 positions／unread_promotions，
 """
 from django.utils import timezone
 
+from .enrollment_policy import official_conflicting_entry, policy_decision
 from .models import Enrollment, Waitlist
 from .verdict import conflicting_section, same_course_section
 
@@ -74,19 +75,25 @@ def positions(user, term):
 def _next_waiter(section, exclude=()):
     # 只鎖 waitlist 列本身（of=("self",)），不連帶鎖 User/Course，
     # 避免與 register() 的鎖順序不同造成 deadlock
+    # section__course__term 與 ntub_offering_sources 一起帶進來：
+    # 遞補前要重新驗證班別政策與官方課表衝堂
     return (Waitlist.objects.filter(section=section, promoted_at__isnull=True)
             .exclude(pk__in=exclude)
+            .select_related("section__course__term")
+            .prefetch_related("section__ntub_offering_sources")
             .select_for_update(of=("self",)).first())
 
 
 def promote_next(section):
     """該班等待名單第一位轉為正式加選（FIFO，不越序）。
 
-    若該位「已選同課另一班」或「與已選班別衝堂」，該列移出名單、順延下一位。
+    遞補前會重新驗證與加選相同的判準：已選同課另一班、與已選班別衝堂、
+    與班級官方課表衝堂、班別修課政策已被撤回（撤回就不能自動變成加選）。
+    不符合者移出名單、順延下一位。
     遞補不重查學分上限（見 docs 已知限制）。
     """
     # 函式內 import：standing 的 get_standing 讀本模組的 positions，模組層不能互相 import
-    from .standing import enrolled_sections
+    from .standing import get_standing
     now = timezone.now()
     seen = []
     while True:
@@ -95,14 +102,24 @@ def promote_next(section):
             return
         seen.append(wait.pk)
         course = wait.section.course
-        # 只取需要的 sections（同課與衝堂檢查），不在持鎖的迴圈裡掃描等待順位與已修課號
-        sections = enrolled_sections(wait.user, course.term)
+        # 只取需要的 standing（同課、衝堂、政策、官方課表），不在持鎖的迴圈裡掃描等待順位與已修課號
+        standing = get_standing(wait.user, course.term, include_waiting=False)
+        sections = standing.sections
         if same_course_section(sections, course) is not None:
             # 排隊後又選了同課另一班：不再符合等待條件，移出名單後看下一位
             wait.delete()
             continue
+        # 政策被撤回（或從未發布）就不能自動遞補成加選
+        decision = policy_decision(wait.section, standing.class_group, standing.policies)
+        if not decision.allowed:
+            wait.delete()
+            continue
         if conflicting_section(sections, wait.section) is not None:
             # 與已選班別衝堂：同樣移出、順延（維持「不衝堂」不變式）
+            wait.delete()
+            continue
+        if official_conflicting_entry(wait.section, standing.official_entries) is not None:
+            # 與班級官方課表衝堂：移出、順延
             wait.delete()
             continue
         if section.is_full:  # 建立前重查容量（正常退選後必有空位，純防禦）

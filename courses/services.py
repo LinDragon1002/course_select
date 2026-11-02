@@ -25,7 +25,11 @@ def register(user, section):
     with transaction.atomic():
         # shortcut: sqlite 不支援列鎖，名額在高併發下可能超收；換 PostgreSQL 時 select_for_update 才會生效
         # course__term 一起帶進來，時間窗與 standing 判斷永遠用新查出的 DB 狀態
-        section = Section.objects.select_for_update().select_related("course__term").get(pk=section.pk)
+        # ntub_offering_sources 一起帶進來：官方開課的班別政策判定要用的
+        section = (Section.objects.select_for_update()
+                   .select_related("course__term")
+                   .prefetch_related("ntub_offering_sources")
+                   .get(pk=section.pk))
         term = section.course.term
         standing = get_standing(user, term)
         verdict = evaluate(standing, section, window_gate(term))

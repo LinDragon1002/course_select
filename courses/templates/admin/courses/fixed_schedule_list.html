@@ -1,0 +1,16 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs"><a href="{% url 'admin:index' %}">首頁</a> › 班級固定課表</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>班級固定課表</h1>
+  <p>選擇學年度／學期與授權範圍內的班級，查看、接管及發布固定課表。</p>
+  <form method="get" class="form">
+    {{ form.as_p }}
+    <button type="submit" class="default">查看班級課表</button>
+  </form>
+</div>
+{% endblock %}

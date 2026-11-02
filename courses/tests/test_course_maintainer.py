@@ -28,6 +28,7 @@ from ..models import (AcademicCatalog, AcademicClassGroup, AcademicDepartment,
                       AcademicProgramType, Course, CourseMaintainerScope, Enrollment,
                       NtubCurriculumRecommendation, NtubOfferingAmbiguity,
                       NtubOfferingSource, Section, SectionClassPolicy, Term, Teacher)
+from .session_helpers import force_admin_login
 
 
 class MaintainerTestBase(TestCase):
@@ -146,7 +147,7 @@ class StudentCannotManagePolicyTests(MaintainerTestBase):
 
     def setUp(self):
         super().setUp()
-        self.client.force_login(self.student)
+        force_admin_login(self.client, self.student)
 
     def test_student_cannot_open_policy_admin(self):
         r = self.client.get(reverse("admin:courses_sectionclasspolicy_add"))
@@ -183,7 +184,7 @@ class NtubEmailGrantsNothingTests(TestCase):
         self.assertFalse(user.is_staff)
         self.assertFalse(user.is_superuser)
         self.assertFalse(user.groups.exists())
-        self.client.force_login(user)
+        force_admin_login(self.client, user)
         r = self.client.get(reverse("admin:index"))
         self.assertEqual(r.status_code, 302)
 
@@ -193,7 +194,7 @@ class MaintainerScopeTests(MaintainerTestBase):
 
     def setUp(self):
         super().setUp()
-        self.client.force_login(self.maintainer)
+        force_admin_login(self.client, self.maintainer)
 
     def test_maintainer_can_open_admin_and_policy_list(self):
         self.assertEqual(self.client.get(reverse("admin:index")).status_code, 200)
@@ -297,7 +298,7 @@ class MaintainerCannotEscalateTests(MaintainerTestBase):
 
     def setUp(self):
         super().setUp()
-        self.client.force_login(self.maintainer)
+        force_admin_login(self.client, self.maintainer)
 
     def test_maintainer_is_not_superuser(self):
         self.assertFalse(self.maintainer.is_superuser)
@@ -405,7 +406,7 @@ class CourseNameOnlyRecommendationTests(MaintainerTestBase):
         self.assertIsNone(published_enrollment_policy(self.section, self.class_30b))
 
     def test_maintainer_confirmation_keeps_source_records_intact(self):
-        self.client.force_login(self.maintainer)
+        force_admin_login(self.client, self.maintainer)
         r = self.client.post(reverse("admin:courses_sectionclasspolicy_add"),
                              self.policy_data(self.class_30b, category="PROFESSIONAL_ELECTIVE",
                                               can_enroll=True))
@@ -434,7 +435,7 @@ class CourseNameOnlyRecommendationTests(MaintainerTestBase):
         policy = SectionClassPolicy.objects.create(
             section=self.section, class_group=self.class_30b,
             course_category="PROFESSIONAL_ELECTIVE", can_enroll=True, status="PUBLISHED")
-        self.client.force_login(self.maintainer)
+        force_admin_login(self.client, self.maintainer)
         r = self.client.post(reverse("admin:courses_sectionclasspolicy_changelist"),
                              {"action": "withdraw_selected_policies",
                               "_selected_action": [str(policy.pk)]})
@@ -457,7 +458,7 @@ class SuperuserAssignsMaintainerTests(TestCase):
             catalog=self.catalog, program_type=self.program_type, code="406", name_zh="資訊管理系")
         self.user = get_user_model().objects.create_user("teacher1", email="t1@ntub.edu.tw",
                                                          password="pw")
-        self.client.force_login(self.superuser)
+        force_admin_login(self.client, self.superuser)
 
     def test_superuser_adds_scope_and_user_becomes_maintainer(self):
         r = self.client.post(reverse("admin:courses_coursemaintainerscope_add"),
@@ -495,7 +496,7 @@ class MaintainerCourseSectionAdminTests(MaintainerTestBase):
 
     def setUp(self):
         super().setUp()
-        self.client.force_login(self.maintainer)
+        force_admin_login(self.client, self.maintainer)
 
     def course_data(self, code, department):
         return {
@@ -507,6 +508,11 @@ class MaintainerCourseSectionAdminTests(MaintainerTestBase):
             "credits": 3,
             "syllabus": "",
             "prerequisites": [],
+            "teaching_syllabus-TOTAL_FORMS": "1",
+            "teaching_syllabus-INITIAL_FORMS": "0",
+            "teaching_syllabus-MIN_NUM_FORMS": "0",
+            "teaching_syllabus-MAX_NUM_FORMS": "1",
+            "teaching_syllabus-0-id": "",
         }
 
     def section_data(self, course):
@@ -525,8 +531,9 @@ class MaintainerCourseSectionAdminTests(MaintainerTestBase):
         group = Group.objects.get(name=MAINTAINER_GROUP_NAME)
         codenames = set(group.permissions.values_list("codename", flat=True))
         self.assertTrue({"add_course", "change_course", "add_section", "change_section"} <= codenames)
-        self.assertNotIn("delete_course", codenames)
-        self.assertNotIn("delete_section", codenames)
+        self.assertTrue({"delete_course", "delete_section",
+                         "delete_ntubtimetablesnapshot",
+                         "delete_ntubtimetableentry"} <= codenames)
 
     def test_maintainer_can_create_owned_course_and_section(self):
         course_response = self.client.post(

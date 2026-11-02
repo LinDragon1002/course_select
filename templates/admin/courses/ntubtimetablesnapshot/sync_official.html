@@ -1,10 +1,10 @@
 {% extends "admin/base_site.html" %}
 {% block content %}
 <div class="card">
-  <div class="card-header"><h1>同步官方課表與教學大綱</h1></div>
+  <div class="card-header"><h1>歷史匯入工具：官方課表資料補抓</h1></div>
   <div class="card-body">
     {% if error %}<p class="errornote">{{ error }}</p>{% endif %}
-    <p>請先預覽官方查詢結果，確認後才會寫入課表快照。課綱會依課表中的五個官方識別欄位個別同步。</p>
+    <p>這是歷史來源追蹤工具。匯入只更新官方來源版本，不會覆蓋系所維護的草稿或已發布固定課表。</p>
     <form method="post" id="official-sync-form">
       {% csrf_token %}
       <div class="row">

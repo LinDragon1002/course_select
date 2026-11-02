@@ -2,8 +2,8 @@
 from . import waitlist
 from .maintainer import scoped_class_groups, scoped_courses, scoped_sections
 from .admin_navigation import can_bulk_assign, can_view_model
-from .models import (OfficialCourseCredit, SectionClassPolicy,
-                     NtubTimetableEntry, Term)
+from .credits import official_entry_credits
+from .models import SectionClassPolicy, NtubTimetableEntry, Term
 from django.urls import reverse
 
 
@@ -11,7 +11,12 @@ def ui_shell(request):
     """App shell 需要的顯示資料（學期代碼）。不改業務邏輯。"""
     if request.path.startswith("/admin/"):
         return {}
-    return {"current_term": Term.current()}
+    term = Term.current()
+    term_label = ""
+    if term:
+        year, separator, semester = term.code.partition("-")
+        term_label = f"{year} 學年度 第 {semester} 學期" if separator else term.code
+    return {"current_term": term, "current_term_label": term_label}
 
 
 def waitlist_banner(request):
@@ -48,12 +53,13 @@ def admin_dashboard(request):
             "snapshot__class_group_id", "snapshot__term_id", "course_code"
         ).distinct()
     ) if term is not None else set()
-    confirmed_keys = set(
-        OfficialCourseCredit.objects.filter(
-            class_group__in=groups, term=term
-        ).values_list("class_group_id", "term_id", "course_code")
-    ) if term is not None else set()
-    pending_credits = len(pending_keys - confirmed_keys)
+    entries = list(NtubTimetableEntry.objects.filter(
+        snapshot__class_group__in=groups,
+        snapshot__term=term,
+        entry_type="course",
+    ).select_related("snapshot__term", "snapshot__class_group")) if term else []
+    effective = official_entry_credits(entries)
+    pending_credits = sum(1 for item in effective.values() if item.value is None)
     action_specs = [
         ("課程資料", "bi bi-1-circle", "admin:courses_course_changelist",
          can_view_model("courses.course", request)),

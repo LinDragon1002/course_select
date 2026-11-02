@@ -1,6 +1,11 @@
 {% extends "courses/base.html" %}
 {% block title %}{{ course.name }}{% endblock %}
 {% block content %}
+<nav class="detail-breadcrumb" aria-label="麵包屑">
+  <a href="{{ course_list_url }}">選課</a>
+  <span aria-hidden="true">›</span>
+  <span>{{ course.name }}</span>
+</nav>
 <header class="detail-head">
   <div class="detail-title-group">
     <h1>{{ course.name }}</h1>
@@ -43,7 +48,56 @@
 
     <section class="panel detail-syllabus" id="course-syllabus">
       <h2>課程大綱</h2>
-      <p>{{ course.syllabus|linebreaksbr|default:"尚無大綱。" }}</p>
+      {% if teaching_syllabus %}
+      <div class="official-syllabus-document course-teaching-syllabus">
+        <h3 class="official-syllabus-title">課程教學大綱</h3>
+        <div class="official-syllabus-table-wrap">
+          <table class="official-syllabus-table official-syllabus-basic" aria-label="課程基本資料">
+            <tbody>
+              <tr>
+                <th scope="row">學年</th>
+                <td>{{ course_term_year|default:"未提供" }}</td>
+                <th scope="row">學期</th>
+                <td>{{ course_term_semester|default:"未提供" }}</td>
+              </tr>
+              <tr>
+                <th scope="row">課程代碼</th>
+                <td>{{ course.code|default:"未提供" }}</td>
+                <th scope="row">科目名稱</th>
+                <td>{{ course.name|default:"未提供" }}</td>
+              </tr>
+              <tr>
+                <th scope="row">學分數</th>
+                <td>{{ course.credits }} 學分</td>
+                <th scope="row">任課老師</th>
+                <td>{{ course.teacher|default:"未提供" }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="official-syllabus-table-wrap">
+          <table class="official-syllabus-table official-syllabus-content">
+            <colgroup><col><col></colgroup>
+            <thead>
+              <tr><th scope="col">項目</th><th scope="col">內容</th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">教學目標</th><td>{{ teaching_syllabus.teaching_target|default:"未提供"|linebreaksbr }}</td></tr>
+              <tr><th scope="row">教學內容</th><td>{{ teaching_syllabus.teaching_matter|default:"未提供"|linebreaksbr }}</td></tr>
+              {% for week in teaching_syllabus_weeks %}
+              <tr><th scope="row">{{ week.label }}</th><td>{{ week.content|default:"未提供"|linebreaksbr }}</td></tr>
+              {% endfor %}
+              <tr><th scope="row">成績評量</th><td>{{ teaching_syllabus.assessment|default:"未提供"|linebreaksbr }}</td></tr>
+              <tr><th scope="row">指定教科書及參考書籍</th><td>{{ teaching_syllabus.references|default:"未提供"|linebreaksbr }}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% elif course.syllabus %}
+      <div class="legacy-course-syllabus">{{ course.syllabus|linebreaksbr }}</div>
+      {% else %}
+      <p>教學大綱尚未公布。</p>
+      {% endif %}
       {% if official_syllabus %}
       <h3>官方教學大綱</h3>
       {% if official_credit_conflicts %}
@@ -149,7 +203,7 @@
     var start = Number(button.dataset.startPeriod);
     var end = Number(button.dataset.endPeriod);
     var conflict = button.dataset.action === "blocked_conflict";
-    var periodCount = Math.max(13, end);
+    var periodCount = 13;
     grid.replaceChildren();
     var corner = document.createElement("span");
     corner.className = "preview-corner";
@@ -165,12 +219,16 @@
     for (var period = 1; period <= periodCount; period += 1) {
       var label = document.createElement("span");
       label.className = "preview-period";
-      label.textContent = "第" + period;
+      label.textContent = "第" + period + "節";
+      label.style.gridColumn = "1";
+      label.style.gridRow = String(period + 1);
       grid.appendChild(label);
       weekdays.forEach(function (_, index) {
         var cell = document.createElement("span");
         cell.className = "preview-cell";
         cell.setAttribute("aria-hidden", "true");
+        cell.style.gridColumn = String(index + 2);
+        cell.style.gridRow = String(period + 1);
         grid.appendChild(cell);
         if (day === index + 1 && period === start) {
           scheduleBlock = document.createElement("span");

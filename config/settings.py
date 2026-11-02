@@ -29,7 +29,7 @@ INSTALLED_APPS = [
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
+    "courses.session_middleware.PathAwareSessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -94,6 +94,7 @@ TIME_ZONE = "Asia/Taipei"
 USE_TZ = True
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+SESSION_COOKIE_NAME = "sessionid"
 
 # --- 登入 ---
 # 學生一律走 Google OAuth（/login/ → Google）；只有經 Google 驗證的

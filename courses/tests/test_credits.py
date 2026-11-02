@@ -5,7 +5,7 @@ from ..credits import credit_limits, summarize_credits
 from ..models import (AcademicCatalog, AcademicClassGroup, AcademicDepartment,
                       AcademicProgramType, Course, Enrollment,
                       NtubTimetableEntry, NtubTimetableSnapshot, Section,
-                      Teacher, Term)
+                      Teacher, Term, OfficialTeachingSyllabus)
 
 
 class CreditSummaryTests(TestCase):
@@ -61,13 +61,11 @@ class CreditSummaryTests(TestCase):
         NtubTimetableEntry.objects.create(
             snapshot=snapshot, entry_type="activity", course_name="共同空堂",
             weekday=3, start_period=1, end_period=1)
-        from ..models import OfficialCourseCredit
-        OfficialCourseCredit.objects.create(
-            term=self.term, class_group=self.class_30b,
-            course_code="PE301", credits=0, source_note="體育三（上）")
-        OfficialCourseCredit.objects.create(
-            term=self.term, class_group=self.class_30b,
-            course_code="OS301", credits=3, source_note="核對")
+        for code, credits in (("PE301", 0), ("OS301", 3)):
+            OfficialTeachingSyllabus.objects.create(
+                academic_year="115", semester="1", class_code="40630B",
+                official_serial="", course_code=code,
+                snapshot=snapshot, credits=credits, status="success")
         summary = summarize_credits(
             self.class_30b, self.term,
             official_entries=NtubTimetableEntry.objects.filter(
@@ -77,10 +75,6 @@ class CreditSummaryTests(TestCase):
 
     def test_enrolled_course_overlapping_official_is_not_double_counted(self):
         self.official_entry(self.class_30b, "OS301")
-        from ..models import OfficialCourseCredit
-        OfficialCourseCredit.objects.create(
-            term=self.term, class_group=self.class_30b,
-            course_code="OS301", credits=3)
         section = self.course_section("OS301", credits=3)
         user = get_user_model().objects.create_user("student")
         Enrollment.objects.create(user=user, section=section)
@@ -88,29 +82,22 @@ class CreditSummaryTests(TestCase):
             self.class_30b, self.term, [section],
             NtubTimetableEntry.objects.filter(
                 snapshot__class_group=self.class_30b))
-        self.assertEqual(summary.total, 3)
+        self.assertEqual(summary.total, 2)
         self.assertEqual(summary.enrolled, 3)
 
-    def test_unconfirmed_official_course_is_explicitly_incomplete(self):
+    def test_official_course_without_syllabus_uses_period_estimate(self):
         self.official_entry(self.class_30b, "OS301")
         summary = summarize_credits(
             self.class_30b, self.term,
             official_entries=NtubTimetableEntry.objects.filter(
                 snapshot__class_group=self.class_30b))
-        self.assertFalse(summary.complete)
-        self.assertEqual(summary.total, 0)
-        self.assertEqual(summary.pending_course_codes, ("OS301",))
+        self.assertTrue(summary.complete)
+        self.assertEqual(summary.total, 2)
+        self.assertEqual(summary.pending_course_codes, ())
 
     def test_each_class_uses_its_own_confirmations(self):
         self.official_entry(self.class_20a, "A20")
         self.official_entry(self.class_30b, "A30")
-        from ..models import OfficialCourseCredit
-        OfficialCourseCredit.objects.create(
-            term=self.term, class_group=self.class_20a,
-            course_code="A20", credits=2)
-        OfficialCourseCredit.objects.create(
-            term=self.term, class_group=self.class_30b,
-            course_code="A30", credits=4)
         self.assertEqual(summarize_credits(
             self.class_20a, self.term,
             official_entries=NtubTimetableEntry.objects.filter(
@@ -118,4 +105,4 @@ class CreditSummaryTests(TestCase):
         self.assertEqual(summarize_credits(
             self.class_30b, self.term,
             official_entries=NtubTimetableEntry.objects.filter(
-                snapshot__class_group=self.class_30b)).total, 4)
+                snapshot__class_group=self.class_30b)).total, 2)

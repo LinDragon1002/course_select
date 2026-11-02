@@ -14,6 +14,7 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.test import RequestFactory, TestCase
+from django.urls import reverse
 from django_adminlte4.conf import get_config
 from django_adminlte4.templatetags.adminlte import adminlte_admin_menu
 
@@ -44,7 +45,7 @@ def item_texts(menu):
 
 
 class AdminMenuStructureTests(TestCase):
-    """驗收 1、2：五個中文分類、既有入口一個都沒少。"""
+    """驗收主要分類與入口；舊 ModelAdmin 不必全部出現在側邊欄。"""
 
     def test_uses_official_admin_menu_setting(self):
         cfg = get_config()
@@ -54,37 +55,57 @@ class AdminMenuStructureTests(TestCase):
     def test_has_required_chinese_categories(self):
         menu = build_menu(self.superuser())
         self.assertEqual(category_titles(menu), [
-            "管理總覽", "課程規劃", "班級固定課表", "官方資料查核",
-            "學籍與班級", "選課與候補", "系統管理",
+            "管理總覽", "課程規劃", "班級固定課表",
+            "歷史匯入與來源追蹤", "學籍與班級", "選課與候補", "系統管理",
         ])
 
     def test_expected_items_are_present(self):
         texts = item_texts(build_menu(self.superuser()))
         for expected in ("班別修課政策", "批次安排課程", "課程資料", "開課班別",
                          "學制", "系所", "班級", "學生學籍",
-                         "官方開課來源", "官方班級課表", "官方課表明細", "課綱推薦",
-                         "候選開課", "開課疑義",
+                         "班級固定課表", "固定課表明細",
+                         "班級課程教學大綱", "歷史匯入快照",
+                         "官方教學大綱來源", "歷史官方開課來源",
                          "加選紀錄", "候補名單",
                          "學期", "教師", "學籍目錄", "維護員授權",
                          "使用者", "群組", "電子郵件", "站台設定"):
             self.assertIn(expected, texts)
 
-    def test_every_registered_admin_model_has_a_menu_entry(self):
-        """所有註冊在 Django Admin 的模型都還在側邊欄裡（既有入口全部保留）。"""
+    def test_legacy_official_data_entries_are_not_primary_menu_items(self):
+        texts = item_texts(build_menu(self.superuser()))
+        for retired in ("官方資料查核", "官方課程學分核對", "官方開課來源",
+                        "課綱推薦", "候選開課", "開課疑義"):
+            self.assertNotIn(retired, texts)
+
+    def test_required_routes_and_official_sync_route_remain_available(self):
         from django.contrib import admin
 
         cfg = get_config()
-        routes = set()
-        for category in cfg["admin_menu"]:
-            for child in category.get("submenu", []):
-                if child.get("route"):
-                    routes.add(child["route"])
-
-        for model in admin.site._registry:
-            wanted = (f"admin:{model._meta.app_label}_"
-                      f"{model._meta.model_name}_changelist")
-            self.assertIn(wanted, routes,
-                          msg=f"側邊欄少了 {model._meta.label} 的入口")
+        routes = {
+            child["route"]
+            for category in cfg["admin_menu"]
+            for child in category.get("submenu", [])
+            if child.get("route")
+        }
+        required = {
+            "admin:index",
+            "admin:courses_course_changelist",
+            "admin:courses_section_changelist",
+            "admin:courses_sectionclasspolicy_changelist",
+            "admin:courses_ntubtimetablesnapshot_fixed_schedule",
+            "admin:courses_ntubtimetablesnapshot_changelist",
+            "admin:courses_ntubtimetableentry_changelist",
+            "admin:courses_officialteachingsyllabus_changelist",
+        }
+        self.assertTrue(required.issubset(routes))
+        snapshot_admin = admin.site._registry[
+            next(model for model in admin.site._registry
+                 if model._meta.label_lower == "courses.ntubtimetablesnapshot")]
+        self.assertEqual(
+            reverse("admin:courses_ntubtimetablesnapshot_sync_official"),
+            "/admin/courses/ntubtimetablesnapshot/sync-official/",
+        )
+        self.assertTrue(snapshot_admin.get_urls())
 
     def test_category_icons_use_bootstrap_icons(self):
         for item in build_menu(self.superuser()):
@@ -133,8 +154,8 @@ class AdminMenuPermissionTests(TestCase):
     def test_maintainer_still_sees_allowed_entries(self):
         texts = item_texts(build_menu(self.maintainer))
         for visible in ("班別修課政策", "批次安排課程", "課程資料", "開課班別",
-                        "學制", "系所", "班級",
-                        "官方開課來源", "官方班級課表", "課綱推薦"):
+                        "學制", "系所", "班級", "班級固定課表",
+                        "班級課程教學大綱", "官方教學大綱來源"):
             self.assertIn(visible, texts)
 
     def test_superuser_sees_everything(self):
@@ -158,13 +179,13 @@ class AdminMenuPermissionTests(TestCase):
     def test_maintainer_scope_is_active_shows_scoped_entries(self):
         texts = item_texts(build_menu(self.maintainer))
         self.assertIn("課程資料", texts)
-        self.assertIn("官方開課來源", texts)
+        self.assertIn("班級固定課表", texts)
 
     def test_maintainer_without_scope_hides_scoped_entries(self):
         """沒有任何有效授權範圍時，受範圍限制的入口不出現。"""
         CourseMaintainerScope.objects.filter(user=self.maintainer).update(is_active=False)
         texts = item_texts(build_menu(self.maintainer))
-        for hidden in ("課程資料", "開課班別", "官方開課來源", "班別修課政策"):
+        for hidden in ("課程資料", "開課班別", "班級固定課表", "班別修課政策"):
             self.assertNotIn(hidden, texts)
 
     def test_bulk_assign_entry_requires_scope(self):

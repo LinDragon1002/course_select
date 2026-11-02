@@ -2,7 +2,10 @@ from decimal import Decimal
 
 from django.test import TestCase
 
-from ..models import OfficialTeachingSyllabus
+from ..models import (AcademicCatalog, AcademicClassGroup, AcademicDepartment,
+                      AcademicProgramType, NtubTimetableEntry,
+                      NtubTimetableSnapshot, NtubOfferingSource,
+                      OfficialTeachingSyllabus, Teacher, Course, Section, Term)
 from ..ntub_official import (_FormFieldParser, OfficialFetchClient, OfficialFetchError,
                               parse_syllabus_html, parse_timetable_html,
                               sync_syllabus)
@@ -111,6 +114,21 @@ class NtubOfficialParserTests(TestCase):
             parse_timetable_html(html, "115", "1", "40630B", "資管三乙")
 
     def test_sync_failure_is_retryable_and_does_not_raise(self):
+        term = Term.objects.create(code="115-1")
+        catalog = AcademicCatalog.objects.create(version="syllabus-snapshot")
+        program = AcademicProgramType.objects.create(
+            catalog=catalog, code="4", name_zh="四技")
+        department = AcademicDepartment.objects.create(
+            catalog=catalog, program_type=program, code="406", name_zh="資管")
+        class_group = AcademicClassGroup.objects.create(
+            catalog=catalog, department=department, code="40630B")
+        snapshot = NtubTimetableSnapshot.objects.create(
+            term=term, class_group=class_group)
+        NtubTimetableEntry.objects.create(
+            snapshot=snapshot, entry_type="course", course_code="40635210",
+            official_serial="1", course_name="作業系統",
+            weekday=3, start_period=1, end_period=2)
+
         class FailingClient:
             def fetch_syllabus(self, identifiers):
                 raise OfficialFetchError("timeout")
@@ -119,7 +137,40 @@ class NtubOfficialParserTests(TestCase):
             "academic_year": "115", "semester": "1",
             "class_code": "40630B", "official_serial": "1",
             "course_code": "40635210",
-        }, FailingClient())
+        }, FailingClient(), snapshot=snapshot)
         self.assertEqual(record.status, "failed")
         self.assertIn("timeout", record.error_message)
         self.assertEqual(OfficialTeachingSyllabus.objects.count(), 1)
+        self.assertEqual(record.snapshot_id, snapshot.pk)
+
+    def test_sync_without_snapshot_rejects_orphan_creation(self):
+        with self.assertRaises(OfficialFetchError):
+            sync_syllabus({
+                "academic_year": "115", "semester": "1",
+                "class_code": "40630B", "official_serial": "1",
+                "course_code": "40635210",
+            })
+        self.assertEqual(OfficialTeachingSyllabus.objects.count(), 0)
+
+    def test_offering_sync_skips_source_without_matching_snapshot(self):
+        term = Term.objects.create(code="115-1")
+        teacher = Teacher.objects.create(name="來源教師")
+        catalog = AcademicCatalog.objects.create(version="offering-no-snapshot")
+        program = AcademicProgramType.objects.create(
+            catalog=catalog, code="4", name_zh="四技")
+        department = AcademicDepartment.objects.create(
+            catalog=catalog, program_type=program, code="406", name_zh="資管")
+        class_group = AcademicClassGroup.objects.create(
+            catalog=catalog, department=department, code="40630B")
+        course = Course.objects.create(
+            term=term, code="OS001", name="課程", teacher=teacher)
+        section = Section.objects.create(
+            course=course, label="1", day=1, start_period=1, end_period=2)
+        NtubOfferingSource.objects.create(
+            source_key="115|1|40630B|1|OS001", academic_year="115",
+            semester="1", class_code="40630B", official_serial="1",
+            course_code="OS001", term=term, class_group=class_group,
+            course=course, section=section, teacher=teacher, course_name="課程")
+        from ..ntub_official import sync_offering_syllabi
+        self.assertEqual(len(sync_offering_syllabi()), 0)
+        self.assertEqual(OfficialTeachingSyllabus.objects.count(), 0)

@@ -7,6 +7,7 @@ from ..models import (AcademicCatalog, AcademicClassGroup, AcademicDepartment,
                       AcademicProgramType, Course, NtubTimetableEntry,
                       NtubTimetableSnapshot, OfficialCourseCredit, Teacher, Term)
 from .base import CourseTestCase
+from .session_helpers import force_admin_login
 
 
 class PrereqLimitTests(CourseTestCase):
@@ -15,6 +16,11 @@ class PrereqLimitTests(CourseTestCase):
     def setUp(self):
         super().setUp()
         self.client.force_login(get_user_model().objects.create_superuser("root", password="pw"))
+
+        force_admin_login(
+            self.client,
+            get_user_model().objects.get(username="root"),
+        )
 
     def course_data(self, code, *prereq_codes):
         catalog, _ = AcademicCatalog.objects.get_or_create(version="prereq-admin")
@@ -29,7 +35,12 @@ class PrereqLimitTests(CourseTestCase):
         return {"term": self.term.pk, "owning_department": department.pk,
                 "code": code, "name": "測試課", "teacher": self.teacher.pk,
                 "credits": 3, "syllabus": "",
-                "prerequisites": [self.course(c).pk for c in prereq_codes]}
+                "prerequisites": [self.course(c).pk for c in prereq_codes],
+                "teaching_syllabus-TOTAL_FORMS": "1",
+                "teaching_syllabus-INITIAL_FORMS": "0",
+                "teaching_syllabus-MIN_NUM_FORMS": "0",
+                "teaching_syllabus-MAX_NUM_FORMS": "1",
+                "teaching_syllabus-0-id": ""}
 
     def test_add_course_with_two_prereqs_saves(self):
         r = self.client.post(reverse("admin:courses_course_add"), self.course_data("CS999", "CS101", "CS202"))
@@ -69,38 +80,18 @@ class OfficialCourseCreditAdminTests(CourseTestCase):
             course_name="體育三（上）", weekday=1, start_period=1, end_period=2)
         self.admin_user = get_user_model().objects.create_superuser(
             "credit-admin", "credit@example.com", "password")
-        self.client.force_login(self.admin_user)
+        force_admin_login(self.client, self.admin_user)
 
-    def test_existing_credit_is_prefilled_and_zero_is_saved(self):
-        credit = OfficialCourseCredit.objects.create(
-            term=self.term, class_group=self.class_group,
-            course_code="PE301", credits=0, source_note="學制核對")
+    def test_course_credit_is_read_only_and_uses_timetable_periods(self):
         model_admin = admin.site._registry[NtubTimetableEntry]
         request = RequestFactory().get("/")
         request.user = self.admin_user
         form_class = model_admin.get_form(request, self.entry)
         form = form_class(instance=self.entry)
-        self.assertEqual(form.initial["confirmed_credits"], 0)
-        self.assertEqual(form.initial["credit_source_note"], "學制核對")
-        self.assertIn("confirmed_credits", form.fields)
-        self.assertEqual(credit.credits, 0)
-
-        bound = form_class(
-            data={"confirmed_credits": "0", "credit_source_note": "重新核對"},
-            instance=self.entry)
-        self.assertTrue(bound.is_valid(), bound.errors)
-        model_admin.save_model(request, self.entry, bound, change=True)
-        credit.refresh_from_db()
-        self.assertEqual(credit.credits, 0)
-        self.assertEqual(credit.source_note, "重新核對")
-
-        unchanged = form_class(data={
-            "confirmed_credits": "", "credit_source_note": "",
-        }, instance=self.entry)
-        self.assertTrue(unchanged.is_valid(), unchanged.errors)
-        model_admin.save_model(request, self.entry, unchanged, change=True)
-        credit.refresh_from_db()
-        self.assertEqual(credit.credits, 0)
+        self.assertNotIn("confirmed_credits", form.fields)
+        self.assertNotIn("credit_source_note", form.fields)
+        self.assertEqual(model_admin.course_credit_display(self.entry), 2)
+        self.assertEqual(model_admin.credit_basis_display(self.entry), "節次暫估")
 
     def test_adding_entry_can_create_credit_in_same_save(self):
         model_admin = admin.site._registry[NtubTimetableEntry]
@@ -121,15 +112,12 @@ class OfficialCourseCreditAdminTests(CourseTestCase):
             "periods": "[]",
             "raw_text": "",
             "course_href": "",
-            "confirmed_credits": "3",
-            "credit_source_note": "人工核對",
         })
         self.assertTrue(form.is_valid(), form.errors)
         entry = form.save(commit=False)
         model_admin.save_model(request, entry, form, change=False)
-        self.assertTrue(OfficialCourseCredit.objects.filter(
-            term=self.term, class_group=self.class_group,
-            course_code="OS301", credits=3).exists())
+        self.assertTrue(NtubTimetableEntry.objects.filter(
+            snapshot=self.snapshot, course_code="OS301").exists())
 
     def test_sync_official_page_handles_class_without_grade(self):
         AcademicClassGroup.objects.create(

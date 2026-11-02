@@ -49,20 +49,20 @@
   --info-text: #1e4e80;
 
   /* Schedule blocks */
-  --slot-official-bg: #fbf4dc;
-  --slot-official-border: #e6d6a8;
-  --slot-official-text: #5c4a1c;
-  --slot-official-bar: #d4b45a;
+  --slot-official-bg: #e4f1e9;
+  --slot-official-border: #b8d7c2;
+  --slot-official-text: #315d3d;
+  --slot-official-bar: #6ea37b;
 
-  --slot-activity-bg: #f2f2f5;
-  --slot-activity-border: #dcdce3;
+  --slot-activity-bg: #eceef1;
+  --slot-activity-border: #d5d9df;
   --slot-activity-text: #4a4a55;
   --slot-activity-bar: #9a9aa8;
 
-  --slot-enrolled-bg: #eee8f8;
-  --slot-enrolled-border: #c9b6e0;
-  --slot-enrolled-text: #3b1b57;
-  --slot-enrolled-bar: var(--primary-600);
+  --slot-enrolled-bg: #fbebd9;
+  --slot-enrolled-border: #e6c6a9;
+  --slot-enrolled-text: #70452d;
+  --slot-enrolled-bar: #c7834d;
 
   --slot-merged-bg: #e8f4ec;
   --slot-merged-border: #b7dcc4;

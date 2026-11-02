@@ -2,6 +2,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from .session_helpers import force_admin_login
+
 from ..admin_navigation import ADMIN_MENU
 from ..maintainer import (MAINTAINER_GROUP_NAME, grant_maintainer_access,
                           scoped_departments)
@@ -55,7 +57,7 @@ class AdminDashboardTests(TestCase):
         grant_maintainer_access(self.maintainer)
 
     def test_dashboard_shows_database_statistics_and_actions(self):
-        self.client.force_login(self.superuser)
+        force_admin_login(self.client, self.superuser)
         response = self.client.get(reverse("admin:index"))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["dashboard_stats"]["course_count"], 2)
@@ -64,7 +66,7 @@ class AdminDashboardTests(TestCase):
         self.assertContains(response, "資管課")
 
     def test_maintainer_dashboard_is_scoped(self):
-        self.client.force_login(self.maintainer)
+        force_admin_login(self.client, self.maintainer)
         response = self.client.get(reverse("admin:index"))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["dashboard_stats"]["course_count"], 1)
@@ -74,11 +76,11 @@ class AdminDashboardTests(TestCase):
     def test_navigation_categories_are_in_required_order(self):
         self.assertEqual(
             [item["text"] for item in ADMIN_MENU],
-            ["管理總覽", "課程規劃", "班級固定課表", "官方資料查核",
+            ["管理總覽", "課程規劃", "班級固定課表",
              "學籍與班級", "選課與候補", "系統管理"])
 
     def test_superuser_can_assign_cross_program_departments_in_one_form(self):
-        self.client.force_login(self.superuser)
+        force_admin_login(self.client, self.superuser)
         response = self.client.post(
             reverse("admin:courses_coursemaintainerscope_add"),
             {
@@ -98,7 +100,7 @@ class AdminDashboardTests(TestCase):
         )
 
     def test_disabling_one_scope_keeps_other_scope_access(self):
-        self.client.force_login(self.superuser)
+        force_admin_login(self.client, self.superuser)
         scope_c = CourseMaintainerScope.objects.create(
             user=self.maintainer, department=self.dept_c)
         grant_maintainer_access(self.maintainer)
@@ -127,7 +129,7 @@ class AdminDashboardTests(TestCase):
         )
 
     def test_scope_form_uses_searchable_four_level_picker(self):
-        self.client.force_login(self.superuser)
+        force_admin_login(self.client, self.superuser)
         response = self.client.get(
             reverse("admin:courses_coursemaintainerscope_add")
         )
@@ -140,7 +142,7 @@ class AdminDashboardTests(TestCase):
         self.assertContains(response, "實際授權單位仍是整個 AcademicDepartment")
 
     def test_scope_form_rejects_empty_department_selection(self):
-        self.client.force_login(self.superuser)
+        force_admin_login(self.client, self.superuser)
         response = self.client.post(
             reverse("admin:courses_coursemaintainerscope_add"),
             {"user": self.maintainer.pk, "departments": [], "is_active": "on"},

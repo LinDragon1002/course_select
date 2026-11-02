@@ -7,13 +7,15 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
+from urllib.parse import urlencode
 
 from . import waitlist
 from .academic import google_identity
+from .credits import official_entry_credits
 from .forms import AcademicSetupForm, cascade_context, selected_values
 from .models import (Course, Enrollment, NtubOfferingSource, NtubTimetableSnapshot,
                     NtubTimetableEntry, OfficialCourseCredit, OfficialTeachingSyllabus,
-                    Section, SectionClassPolicy,
+                    CourseTeachingSyllabus, Section, SectionClassPolicy,
                     StudentAcademicProfile, Term, Waitlist)
 from .ntub_schedule_grid import (DAYS, KIND_ENROLLMENT, KIND_OFFICIAL_ACTIVITY,
                                  KIND_OFFICIAL_COURSE, KIND_OFFICIAL_ENROLLMENT,
@@ -104,6 +106,71 @@ def _section_verdicts(standing, sections, window, authenticated=True):
     return sections
 
 
+def _course_page_schedule(user, term, standing):
+    """建立選課頁的精簡課表，沿用我的課表相同的來源與衝堂資料。"""
+    if not user.is_authenticated or term is None:
+        return build_week_grid([], base_periods=0)
+
+    profile = (StudentAcademicProfile.objects
+               .select_related("class_group__department__program_type")
+               .filter(user=user).first())
+    program_code = (
+        profile.class_group.department.program_type.code
+        if profile is not None else "")
+    official_entries = list(standing.official_entries)
+    mine = list(standing.sections)
+    merged_entry_ids = set()
+    for section in mine:
+        entry = _match_official_entry(section, official_entries)
+        section.official_entry = entry
+        if entry is not None:
+            merged_entry_ids.add(entry.pk)
+
+    items = []
+    for entry in official_entries:
+        if entry.pk in merged_entry_ids:
+            continue
+        items.append(GridItem(
+            kind=KIND_OFFICIAL_COURSE,
+            day=entry.weekday,
+            start_period=entry.start_period,
+            end_period=entry.end_period,
+            title=entry.course_name,
+            subtitle=entry.teacher_name,
+            meta=entry.classroom,
+            url=reverse("official_course_detail", args=[entry.pk]),
+        ))
+    for section in mine:
+        entry = getattr(section, "official_entry", None)
+        if entry is not None:
+            items.append(GridItem(
+                kind=KIND_OFFICIAL_ENROLLMENT,
+                day=section.day,
+                start_period=section.start_period,
+                end_period=section.end_period,
+                title=section.course.name,
+                subtitle=section.label_display,
+                meta=section.room or "教室未定",
+                url=reverse("course_detail", args=[section.course.pk]),
+            ))
+        else:
+            items.append(GridItem(
+                kind=KIND_ENROLLMENT,
+                day=section.day,
+                start_period=section.start_period,
+                end_period=section.end_period,
+                title=section.course.name,
+                subtitle=section.label_display,
+                meta=section.room or "教室未定",
+                url=reverse("course_detail", args=[section.course.pk]),
+            ))
+    return build_week_grid(
+        items,
+        days=DAYS[:5],
+        base_periods=base_periods_for(program_code),
+    )
+
+
 def login_page(request):
     """登入頁：只有「使用 NTUB Google 帳號登入」一個入口。
 
@@ -112,7 +179,7 @@ def login_page(request):
     """
     if request.user.is_authenticated:
         return redirect("course_list")
-    return render(request, "courses/login.html")
+    return render(request, "courses/login.html", {"current_term": Term.current()})
 
 
 def course_list(request):
@@ -160,6 +227,7 @@ def course_list(request):
     # 沒有可加選的班別時顯示說明：有學籍的學生即使列表是空的也要說明原因。
     show_empty_enroll_note = (
         authenticated and enrollable_count == 0 and (bool(sections) or student_scoped))
+    credit_summary = standing.credit_summary
     return render(request, "courses/list.html", {
         "sections": sections, "q": q, "day": day, "slot": slot,
         "days": Section.DAYS, "slots": Section.PERIOD_SLOTS, "full_count": full_count,
@@ -168,11 +236,19 @@ def course_list(request):
         "enrollable_count": enrollable_count if authenticated else None,
         "student_scoped": student_scoped,
         "show_empty_enroll_note": show_empty_enroll_note,
+        "credit_summary": credit_summary,
+        "schedule_grid": _course_page_schedule(request.user, term, standing),
+        "course_notices": [],
     })
 
 
 def course_detail(request, pk):
-    course = get_object_or_404(Course.objects.select_related("teacher"), pk=pk)
+    course = get_object_or_404(
+        Course.objects.select_related(
+            "teacher", "term", "owning_department", "teaching_syllabus",
+        ),
+        pk=pk,
+    )
     # evaluate() 每列會碰 section.course 與 course.prerequisites，必須 prefetch，
     # 否則每列多 2 筆查詢（與 course_list 同一支配方）
     standing = get_standing(request.user, course.term)
@@ -216,12 +292,45 @@ def course_detail(request, pk):
                 credits=official_syllabus.credits).values_list(
                     "class_group__code", "credits")
         )
+    list_params = {
+        key: request.GET.get(key, "").strip()
+        for key in ("q", "day", "slot")
+        if request.GET.get(key, "").strip()
+    }
+    course_list_url = reverse("course_list")
+    if list_params:
+        course_list_url += "?" + urlencode(list_params)
+    teaching_syllabus = getattr(course, "teaching_syllabus", None)
+    if (teaching_syllabus is not None
+            and teaching_syllabus.status != CourseTeachingSyllabus.Status.PUBLISHED):
+        teaching_syllabus = None
+    teaching_syllabus_weeks = []
+    if teaching_syllabus is not None:
+        week_labels = (
+            "第一週", "第二週", "第三週", "第四週", "第五週", "第六週",
+            "第七週", "第八週", "第九週", "第十週", "第十一週", "第十二週",
+            "第十三週", "第十四週", "第十五週", "第十六週", "第十七週",
+            "第十八週",
+        )
+        weekly_progress = teaching_syllabus.weekly_progress or {}
+        teaching_syllabus_weeks = [
+            {"label": label, "content": weekly_progress.get(f"week_{week:02d}")}
+            for week, label in enumerate(week_labels, start=1)
+        ]
+    term_parts = course.term.code.split("-", 1)
     return render(request, "courses/detail.html", {
         "course": course, "sections": sections, "my_section": my_section, "is_teacher": is_teacher, "related": related,
         "window": _window_context(course.term),
         "prereqs": prereqs, "show_prereq_marks": request.user.is_authenticated,
         "official_syllabus": official_syllabus,
         "official_credit_conflicts": official_credit_conflicts,
+        "teaching_syllabus": teaching_syllabus,
+        "teaching_syllabus_weeks": teaching_syllabus_weeks,
+        "course_term_year": term_parts[0],
+        "course_term_semester": (
+            f"第 {term_parts[1]} 學期" if len(term_parts) == 2 else "未提供"
+        ),
+        "course_list_url": course_list_url,
     })
 
 
@@ -315,11 +424,13 @@ def my_schedule(request):
                     if profile is not None else "")
     base_periods = base_periods_for(program_code)
 
-    # 官方快照只取「這個學期、這個班級」的那一份；沒有就是沒有，不借用別的學期。
+    # 班級人工發布版優先；無人工版本時才顯示保留的官方匯入版。
     snapshot = None
     if profile is not None and term is not None:
         snapshot = (NtubTimetableSnapshot.objects
                     .filter(class_group=profile.class_group, term=term)
+                    .filter(status=NtubTimetableSnapshot.Status.PUBLISHED)
+                    .order_by("-source_kind", "-published_at", "-pk")
                     .prefetch_related("entries")
                     .first())
 
@@ -330,14 +441,15 @@ def my_schedule(request):
 
     # 個人加選與班級官方課表是同一門課時合併顯示：官方那一筆不重複佔一個時段，
     # 但官方資料（教師、教室）與本站資料（班別、教室、老師）都保留。
-    official_course_entries = ([e for e in snapshot.entries.all()
-                                if e.entry_type == "course"] if snapshot else [])
+    snapshot_entries = (
+        [entry for entry in snapshot.entries.all() if entry.is_active]
+        if snapshot else []
+    )
+    official_course_entries = [
+        entry for entry in snapshot_entries if entry.entry_type == "course"
+    ]
     credit_summary = standing.credit_summary
-    credit_rows = {
-        row.course_code: row.credits
-        for row in OfficialCourseCredit.objects.filter(
-            class_group=standing.class_group, term=term)
-    } if standing.class_group is not None and term is not None else {}
+    effective_credits = official_entry_credits(official_course_entries)
     merged_entry_ids = set()
     for s in mine:
         entry = _match_official_entry(s, official_course_entries)
@@ -346,19 +458,23 @@ def my_schedule(request):
             merged_entry_ids.add(entry.pk)
 
     if snapshot is not None:
-        for entry in snapshot.entries.all():
+        for entry in snapshot_entries:
             if entry.entry_type == "course":
                 kind = KIND_OFFICIAL_COURSE
                 official_courses.append(entry)
+                credit = effective_credits.get(
+                    (term.code, entry.snapshot.class_group.code,
+                     entry.official_serial, entry.course_code))
                 official_course_rows.append({
                     "name": entry.course_name,
                     "code": entry.course_code,
-                    "teacher": entry.teacher_name,
+                    "teacher": entry.teacher.name if entry.teacher_id else entry.teacher_name,
                     "classroom": entry.classroom,
                     "weekday_label": weekday_labels.get(entry.weekday, ""),
                     "start_period": entry.start_period,
                     "end_period": entry.end_period,
-                    "credits": credit_rows.get(entry.course_code),
+                    "credits": credit.value if credit else None,
+                    "credit_basis": credit.basis if credit else "待同步",
                     "course": Course.objects.filter(
                         term=term, code=entry.course_code).first(),
                     "url": reverse("official_course_detail", args=[entry.pk]),
@@ -443,13 +559,25 @@ def official_course_detail(request, entry_id):
         raise Http404
     entry = get_object_or_404(
         NtubTimetableEntry.objects.select_related(
-            "snapshot__term", "snapshot__class_group"),
+            "snapshot__term", "snapshot__class_group", "teacher", "course",
+        ),
         pk=entry_id,
         snapshot__term=term,
         snapshot__class_group=profile.class_group,
+        snapshot__status=NtubTimetableSnapshot.Status.PUBLISHED,
+        is_active=True,
         entry_type="course",
     )
-    syllabus = OfficialTeachingSyllabus.objects.filter(
+    course = entry.course or Course.objects.filter(
+        term=term, code=entry.course_code,
+    ).first()
+    teaching_syllabus = None
+    if course is not None:
+        teaching_syllabus = CourseTeachingSyllabus.objects.filter(
+            course=course,
+            status=CourseTeachingSyllabus.Status.PUBLISHED,
+        ).first()
+    syllabus = teaching_syllabus or OfficialTeachingSyllabus.objects.filter(
         academic_year=term.code.split("-", 1)[0],
         semester=term.code.split("-", 1)[1],
         class_code=entry.snapshot.class_group.code,
@@ -457,10 +585,37 @@ def official_course_detail(request, entry_id):
         course_code=entry.course_code,
         status="success",
     ).first()
+    week_labels = (
+        "第一週", "第二週", "第三週", "第四週", "第五週", "第六週",
+        "第七週", "第八週", "第九週", "第十週", "第十一週", "第十二週",
+        "第十三週", "第十四週", "第十五週", "第十六週", "第十七週",
+        "第十八週",
+    )
+    weekly_progress = (syllabus.weekly_progress or {}) if syllabus else {}
+    weekly_rows = [
+        {"label": label, "content": weekly_progress.get(f"week_{week:02d}")}
+        for week, label in enumerate(week_labels, start=1)
+    ]
+    academic_year, _, semester = entry.snapshot.term.code.partition("-")
     return render(request, "courses/official_course_detail.html", {
         "entry": entry,
         "snapshot": entry.snapshot,
         "syllabus": syllabus,
+        "display_credits": (
+            entry.credits if entry.credits is not None
+            else getattr(syllabus, "credits", None)
+        ),
+        "display_weekly_hours": (
+            entry.weekly_hours if entry.weekly_hours is not None
+            else getattr(syllabus, "weekly_hours", None)
+        ),
+        "display_teacher_name": (
+            entry.teacher.name if entry.teacher_id
+            else (getattr(syllabus, "teacher_name", "") or entry.teacher_name)
+        ),
+        "academic_year": getattr(syllabus, "academic_year", academic_year),
+        "semester_label": f"第 {semester} 學期" if semester else None,
+        "weekly_rows": weekly_rows,
     })
 
 

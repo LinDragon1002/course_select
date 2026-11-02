@@ -1,0 +1,40 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">首頁</a>
+  &rsaquo; 待審核教學大綱
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>待審核教學大綱</h1>
+  {% if submissions %}
+    <div class="module">
+      <table>
+        <thead>
+          <tr><th>課程</th><th>教師</th><th>學期</th><th>提交時間</th><th>操作</th></tr>
+        </thead>
+        <tbody>
+          {% for submission in submissions %}
+            <tr>
+              <td>{{ submission.course }}</td>
+              <td>{{ submission.teacher }}</td>
+              <td>{{ submission.course.term }}</td>
+              <td>{{ submission.submitted_at|date:"Y-m-d H:i" }}</td>
+              <td>
+                <a href="{% url 'admin:courses_course_syllabus_review_detail' submission.pk %}">
+                  檢視／審核
+                </a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>目前沒有授權範圍內待審核的教學大綱。</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -11,10 +11,12 @@ from urllib.parse import parse_qs, urlparse
 from allauth.socialaccount.models import SocialAccount
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.contrib.auth.models import Group
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from ..models import Term
+from ..teacher_access import SYLLABUS_TEACHER_GROUP_NAME
 
 # 測試用假憑證：不需要真的 .env 金鑰
 FAKE_GOOGLE_SETTINGS = {
@@ -66,12 +68,105 @@ class GoogleLoginTestCase(TestCase):
 
 
 class GoogleLoginSuccessTests(GoogleLoginTestCase):
+    def test_frontend_and_admin_sessions_are_independent(self):
+        self.client = Client(enforce_csrf_checks=True)
+        anonymous_frontend = self.client.get("/login/")
+        anonymous_admin = self.client.get(reverse("admin:index"))
+        self.assertFalse(anonymous_frontend.context["user"].is_authenticated)
+        self.assertEqual(anonymous_admin.status_code, 302)
+        self.assertNotIn("sessionid", self.client.cookies)
+        self.assertNotIn("ntub_admin_sessionid", self.client.cookies)
+
+        admin_user = get_user_model().objects.create_superuser(
+            "isolated-admin", email="isolated-admin@example.com",
+            password="admin-password-123",
+        )
+        self.client.get(reverse("admin:login"))
+        student_response = self.google_login("isolated-student@ntub.edu.tw")
+        self.assertEqual(student_response.status_code, 302)
+        student_cookie = self.client.cookies["sessionid"].value
+        self.assertEqual(
+            self.client.get(reverse("admin:index")).status_code, 302,
+        )
+
+        csrf_token = self.client.cookies["csrftoken"].value
+        admin_login = self.client.post(reverse("admin:login"), {
+            "username": "isolated-admin",
+            "password": "admin-password-123",
+            "next": reverse("admin:index"),
+            "csrfmiddlewaretoken": csrf_token,
+        })
+        self.assertEqual(admin_login.status_code, 302)
+        admin_cookie = self.client.cookies["ntub_admin_sessionid"]
+        self.assertEqual(admin_cookie["path"], "/admin/")
+        self.assertTrue(admin_cookie["httponly"])
+        self.assertIn("sessionid", self.client.cookies)
+        self.assertIn("ntub_admin_sessionid", self.client.cookies)
+        self.assertEqual(self.client.cookies["sessionid"]["path"], "/")
+        self.assertEqual(self.client.cookies["sessionid"].value, student_cookie)
+        self.assertNotEqual(
+            self.client.cookies["sessionid"].value, admin_cookie.value,
+        )
+        self.assertEqual(
+            self.client.cookies["ntub_admin_sessionid"].value,
+            admin_cookie.value,
+        )
+
+        frontend = self.client.get("/onboarding/")
+        admin = self.client.get(reverse("admin:index"))
+        student = get_user_model().objects.get(
+            email="isolated-student@ntub.edu.tw",
+        )
+        self.assertEqual(frontend.context["user"], student)
+        self.assertEqual(admin.context["user"], admin_user)
+
+        csrf_token = self.client.cookies["csrftoken"].value
+        frontend_logout = self.client.post(
+            reverse("logout"),
+            {"csrfmiddlewaretoken": csrf_token},
+        )
+        self.assertEqual(frontend_logout.status_code, 302)
+        self.assertEqual(
+            self.client.get(reverse("admin:index")).context["user"],
+            admin_user,
+        )
+        self.assertFalse(
+            self.client.get("/login/").context["user"].is_authenticated,
+        )
+
+        self.google_login("isolated-student@ntub.edu.tw")
+        self.assertEqual(
+            self.client.get(reverse("admin:index")).context["user"],
+            admin_user,
+        )
+        self.client.get(reverse("admin:logout"))
+        csrf_token = self.client.cookies["csrftoken"].value
+        admin_logout = self.client.post(
+            reverse("admin:logout"),
+            {"csrfmiddlewaretoken": csrf_token},
+        )
+        self.assertEqual(admin_logout.status_code, 302)
+        self.assertEqual(
+            self.client.get("/onboarding/").context["user"], student,
+        )
+        self.assertEqual(
+            self.client.get(reverse("admin:index")).status_code, 302,
+        )
+
     def test_ntub_verified_email_creates_user_and_logs_in(self):
         r = self.google_login("s1234567@ntub.edu.tw")
         self.assertEqual(r.status_code, 302)
         user = get_user_model().objects.get(email="s1234567@ntub.edu.tw")
         self.assertTrue(SocialAccount.objects.filter(user=user, provider="google").exists())
         self.assertEqual(int(self.client.session["_auth_user_id"]), user.pk)
+        self.assertFalse(user.is_staff)
+        self.assertFalse(user.is_superuser)
+        self.assertFalse(user.groups.filter(
+            name=SYLLABUS_TEACHER_GROUP_NAME,
+        ).exists())
+        self.assertEqual(
+            self.client.get(reverse("admin:index")).status_code, 302,
+        )
 
     def test_second_login_reuses_same_user(self):
         self.google_login("s1234567@ntub.edu.tw")
@@ -91,6 +186,31 @@ class GoogleLoginSuccessTests(GoogleLoginTestCase):
 
 
 class GoogleLoginRejectionTests(GoogleLoginTestCase):
+    def test_google_login_cannot_authenticate_teacher_backend_account_by_email(self):
+        teacher_group = Group.objects.create(name=SYLLABUS_TEACHER_GROUP_NAME)
+        teacher_user = get_user_model().objects.create_user(
+            "separate-teacher-account",
+            email="teacher@ntub.edu.tw",
+            password="separate-password",
+            is_staff=True,
+        )
+        teacher_group.user_set.add(teacher_user)
+
+        response = self.google_login("teacher@ntub.edu.tw")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], reverse("login"))
+        self.assertNotIn("_auth_user_id", self.client.session)
+        self.assertFalse(SocialAccount.objects.filter(
+            user=teacher_user, provider="google",
+        ).exists())
+        teacher_user.refresh_from_db()
+        self.assertTrue(teacher_user.has_usable_password())
+        self.assertFalse(
+            get_user_model().objects.filter(
+                email="teacher@ntub.edu.tw",
+            ).exclude(pk=teacher_user.pk).exists()
+        )
+
     def test_non_ntub_email_is_rejected(self):
         r = self.google_login("someone@gmail.com")
         self.assertEqual(r.status_code, 302)
@@ -148,6 +268,8 @@ class AdminLoginTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.context["user"], self.staff)
         self.assertTrue(r.context["user"].is_staff)
+        frontend = self.client.get("/login/")
+        self.assertFalse(frontend.context["user"].is_authenticated)
 
     def test_admin_login_page_is_reachable(self):
         r = self.client.get(reverse("admin:login"))

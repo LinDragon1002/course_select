@@ -21,6 +21,7 @@ from ..maintainer import grant_maintainer_access
 from ..models import (AcademicCatalog, AcademicClassGroup, AcademicDepartment,
                       AcademicProgramType, Course, CourseMaintainerScope, Section,
                       SectionClassPolicy, Term, Teacher)
+from .session_helpers import force_admin_login
 
 BULK_URL = "admin:courses_sectionclasspolicy_bulk_assign"
 
@@ -112,7 +113,7 @@ class BulkAssignmentFlowTests(BulkAssignmentTestBase):
 
     def setUp(self):
         super().setUp()
-        self.client.force_login(self.maintainer)
+        force_admin_login(self.client, self.maintainer)
 
     def test_bulk_page_get_shows_selection_form(self):
         r = self.client.get(reverse(BULK_URL))
@@ -201,7 +202,7 @@ class BulkAssignmentDuplicateTests(BulkAssignmentTestBase):
 
     def setUp(self):
         super().setUp()
-        self.client.force_login(self.maintainer)
+        force_admin_login(self.client, self.maintainer)
 
     def test_repeat_assignment_does_not_duplicate(self):
         self.post_bulk(self.sections)
@@ -243,12 +244,12 @@ class BulkAssignmentPermissionTests(BulkAssignmentTestBase):
         self.assertEqual(SectionClassPolicy.objects.count(), 0)
 
     def test_student_cannot_get_bulk_page(self):
-        self.client.force_login(self.student)
+        force_admin_login(self.client, self.student)
         r = self.client.get(reverse(BULK_URL))
         self.assertIn(r.status_code, (302, 403))
 
     def test_student_cannot_post_bulk(self):
-        self.client.force_login(self.student)
+        force_admin_login(self.client, self.student)
         r = self.post_bulk(self.sections)
         self.assertIn(r.status_code, (302, 403))
         self.assertEqual(SectionClassPolicy.objects.count(), 0)
@@ -259,7 +260,7 @@ class BulkAssignmentPermissionTests(BulkAssignmentTestBase):
         scoped = CourseMaintainerScope.objects.filter(user=self.maintainer).first()
         scoped.is_active = False
         scoped.save(update_fields=["is_active"])
-        self.client.force_login(self.maintainer)
+        force_admin_login(self.client, self.maintainer)
         r = self.client.get(reverse(BULK_URL))
         self.assertIn(r.status_code, (302, 403))
         r = self.post_bulk(self.sections)
@@ -269,7 +270,7 @@ class BulkAssignmentPermissionTests(BulkAssignmentTestBase):
 
     def test_other_department_maintainer_cannot_assign_to_our_class_group(self):
         """其他系所的維護員不得把課程分配給 40630B。"""
-        self.client.force_login(self.other_maintainer)
+        force_admin_login(self.client, self.other_maintainer)
         r = self.post_bulk(self.sections, class_group=self.class_30b)
         self.assertNotEqual(r.status_code, 302)
         self.assertFalse(SectionClassPolicy.objects.filter(
@@ -282,7 +283,7 @@ class BulkAssignmentForgedInputTests(BulkAssignmentTestBase):
 
     def setUp(self):
         super().setUp()
-        self.client.force_login(self.maintainer)
+        force_admin_login(self.client, self.maintainer)
 
     def test_forged_section_id_creates_nothing(self):
         data = {
@@ -327,7 +328,7 @@ class BulkAssignmentDoesNotTouchSourceTests(BulkAssignmentTestBase):
 
     def setUp(self):
         super().setUp()
-        self.client.force_login(self.maintainer)
+        force_admin_login(self.client, self.maintainer)
 
     def test_course_and_section_are_not_modified(self):
         before_courses = {c.pk: (c.code, c.name, c.term_id, c.teacher_id, c.credits)

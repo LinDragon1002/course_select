@@ -124,7 +124,66 @@ def _can_view(label):
 
 
 def can_dashboard(request):
-    return bool(request.user.is_authenticated and request.user.is_staff)
+    if not request.user.is_authenticated or not request.user.is_staff:
+        return False
+    from .maintainer import is_maintainer, is_superuser
+    from .teacher_access import has_teacher_syllabus_access
+
+    if (
+        not is_maintainer(request.user)
+        and not is_superuser(request.user)
+        and has_teacher_syllabus_access(request.user)
+    ):
+        return False
+    return True
+
+
+def can_teacher_syllabi(request):
+    from .maintainer import is_maintainer, is_superuser
+    from .models import Teacher
+    from .teacher_access import has_teacher_syllabus_access
+
+    if not (
+        is_superuser(request.user)
+        or is_maintainer(request.user)
+        or has_teacher_syllabus_access(request.user)
+    ):
+        return False
+    return Teacher.objects.filter(user=request.user).exists()
+
+
+def can_review_syllabi(request):
+    from .maintainer import is_maintainer, is_superuser, scoped_departments
+
+    user = request.user
+    return bool(
+        is_superuser(user)
+        or (
+            user.is_authenticated
+            and user.is_staff
+            and is_maintainer(user)
+            and user.has_perm("courses.change_course")
+            and scoped_departments(user).exists()
+        )
+    )
+
+
+def can_manage_fixed_schedule(request):
+    from .maintainer import is_maintainer, is_superuser, scoped_class_groups
+
+    user = request.user
+    return bool(
+        user.is_authenticated
+        and user.is_active
+        and user.is_staff
+        and (
+            is_superuser(user)
+            or (
+                is_maintainer(user)
+                and scoped_class_groups(user).exists()
+            )
+        )
+    )
 
 
 # --- 選單結構 ---------------------------------------------------------------
@@ -143,15 +202,19 @@ def _category(text, icon, items):
     return {"text": text, "icon": icon, "submenu": items}
 
 
-#: `ADMINLTE["admin_menu"]` 使用的五個中文分類。
+#: `ADMINLTE["admin_menu"]` 使用的中文分類。
 #:
-#: 每一項都對應到既有的管理入口（URL 名稱沿用 Django Admin 官方的
-#: `<app_label>_<model_name>_changelist`），既有入口一個都沒有被拿掉。
+#: 每一項都對應到目前主要操作流程的管理入口。未列入的舊 ModelAdmin
+#: 仍保留註冊、URL 與程式依賴，但不再作為主要側邊欄入口。
 ADMIN_MENU = [
     _category("管理總覽", "bi bi-speedometer2", [
         _item("Dashboard", "admin:index", "bi bi-speedometer2", can_dashboard),
     ]),
     _category("課程規劃", "bi bi-calendar-range", [
+        _item("我的授課課程", "admin:courses_course_teacher_syllabi",
+              "bi bi-person-workspace", can_teacher_syllabi),
+        _item("待審核教學大綱", "admin:courses_course_syllabus_review",
+              "bi bi-clipboard-check", can_review_syllabi),
         _item("課程資料", "admin:courses_course_changelist",
               "bi bi-book", _can_view("courses.course")),
         _item("開課班別", "admin:courses_section_changelist",
@@ -162,24 +225,20 @@ ADMIN_MENU = [
               "bi bi-journal-check", _can_view("courses.sectionclasspolicy")),
     ]),
     _category("班級固定課表", "bi bi-calendar-week", [
-        _item("官方班級課表", "admin:courses_ntubtimetablesnapshot_changelist",
-              "bi bi-calendar3", _can_view("courses.ntubtimetablesnapshot")),
-        _item("官方課表明細", "admin:courses_ntubtimetableentry_changelist",
+        _item("班級固定課表", "admin:courses_ntubtimetablesnapshot_fixed_schedule",
+              "bi bi-calendar3", can_manage_fixed_schedule),
+        _item("固定課表明細", "admin:courses_ntubtimetableentry_changelist",
               "bi bi-list-ul", _can_view("courses.ntubtimetableentry")),
-        _item("官方課程學分核對", "admin:courses_officialcoursecredit_changelist",
-              "bi bi-calculator", _can_view("courses.officialcoursecredit")),
-        _item("官方教學大綱", "admin:courses_officialteachingsyllabus_changelist",
-              "bi bi-book-open", _can_view("courses.officialteachingsyllabus")),
+        _item("班級課程教學大綱", "admin:courses_course_changelist",
+              "bi bi-book-open", _can_view("courses.course")),
     ]),
-    _category("官方資料查核", "bi bi-database-check", [
-        _item("官方開課來源", "admin:courses_ntubofferingsource_changelist",
-              "bi bi-broadcast", _can_view("courses.ntubofferingsource")),
-        _item("課綱推薦", "admin:courses_ntubcurriculumrecommendation_changelist",
-              "bi bi-stars", _can_view("courses.ntubcurriculumrecommendation")),
-        _item("候選開課", "admin:courses_ntubrecommendationcandidate_changelist",
-              "bi bi-search", _can_view("courses.ntubrecommendationcandidate")),
-        _item("開課疑義", "admin:courses_ntubofferingambiguity_changelist",
-              "bi bi-question-circle", _can_view("courses.ntubofferingambiguity")),
+    _category("歷史匯入與來源追蹤", "bi bi-archive", [
+        _item("歷史匯入快照", "admin:courses_ntubtimetablesnapshot_changelist",
+              "bi bi-database", _can_view("courses.ntubtimetablesnapshot")),
+        _item("官方教學大綱來源", "admin:courses_officialteachingsyllabus_changelist",
+              "bi bi-file-earmark-text", _can_view("courses.officialteachingsyllabus")),
+        _item("歷史官方開課來源", "admin:courses_ntubofferingsource_changelist",
+              "bi bi-link-45deg", _can_view("courses.ntubofferingsource")),
     ]),
     _category("學籍與班級", "bi bi-mortarboard", [
         _item("學制", "admin:courses_academicprogramtype_changelist",

@@ -2,37 +2,103 @@ import json
 
 from django import forms
 from django.contrib import admin, messages
+from django.contrib.admin.actions import delete_selected as django_delete_selected
+from django.contrib.auth.admin import GroupAdmin as DjangoGroupAdmin
+from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import Group, User
 from django.contrib.sites.models import Site
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Prefetch, Q
-from django.http import HttpResponseRedirect
+from django.db.models import Count, Prefetch, Q
+from django.http import Http404, HttpResponseRedirect
+from django.http import HttpResponseNotAllowed, JsonResponse
+from django.shortcuts import get_object_or_404
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils import timezone
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
 
 from allauth.account.models import EmailAddress
 from allauth.socialaccount.models import SocialAccount, SocialApp, SocialToken
 
 from .maintainer import (can_manage_policy, can_manage_section, grant_maintainer_access,
-                          is_maintainer, is_superuser, revoke_maintainer_access,
+                          MAINTAINER_GROUP_NAME, is_maintainer, is_superuser,
+                          revoke_maintainer_access,
                           scoped_class_groups, scoped_courses, scoped_departments,
                           scoped_sections)
 from .maintainer_assignment_forms import (BulkClassAssignmentForm,
                                           BulkClassAssignmentSelectForm)
+from .credits import effective_entry_credit
 from .ntub_official import (OfficialFetchError, OfficialFetchClient,
                             parse_timetable_html, sync_offering_syllabi,
                             sync_syllabus, sync_timetable_syllabi)
 from .ntub_timetable_import import import_payload
+from .ntub_schedule_grid import (
+    KIND_OFFICIAL_ACTIVITY,
+    KIND_OFFICIAL_COURSE,
+    GridItem,
+    base_periods_for,
+    build_week_grid,
+)
+from .syllabus_docx import DocxSyllabusError, parse_docx_syllabus
+from .syllabus_forms import (CourseTeachingSyllabusForm, SYLLABUS_FIELDS,
+                             WEEK_FIELD_NAMES, WEEK_LABELS,
+                             CourseSyllabusSubmissionForm,
+                             SyllabusDocxUploadForm)
+from .teacher_access import (
+    SYLLABUS_TEACHER_DISPLAY_NAME,
+    SYLLABUS_TEACHER_GROUP_NAME,
+    has_teacher_syllabus_access,
+)
 from .models import (AcademicCatalog, AcademicClassGroup, AcademicDepartment,
                      AcademicProgramType, Course, CourseMaintainerScope, Enrollment,
+                     CourseSyllabusSubmission, CourseTeachingSyllabus,
                      NtubCurriculumRecommendation, NtubOfferingAmbiguity,
                      NtubOfferingSource, NtubRecommendationCandidate,
                      NtubTimetableEntry, NtubTimetableSnapshot, OfficialCourseCredit,
                      OfficialTeachingSyllabus, Section,
                      SectionClassPolicy, StudentAcademicProfile, Teacher, Term, Waitlist)
+
+
+def teacher_admin_index(request):
+    """Route standalone syllabus teachers to their teaching dashboard."""
+    user = request.user
+    if (
+        user.is_authenticated
+        and user.is_active
+        and user.is_staff
+        and not is_superuser(user)
+        and not is_maintainer(user)
+        and user.groups.filter(name=SYLLABUS_TEACHER_GROUP_NAME).exists()
+    ):
+        return admin.site._registry[Course].teacher_syllabus_list_view(request)
+    return admin.site.index(request)
+
+
+class TeacherAdminForm(forms.ModelForm):
+    class Meta:
+        model = Teacher
+        fields = "__all__"
+
+    def clean_user(self):
+        user = self.cleaned_data.get("user")
+        if user is None:
+            return user
+        if self.instance.pk and user.pk == self.instance.user_id:
+            return user
+        if Teacher.objects.filter(user=user).exclude(pk=self.instance.pk).exists():
+            raise forms.ValidationError("此登入帳號已綁定其他教師。")
+        if (
+            not user.is_active
+            or not user.is_staff
+            or user.is_superuser
+            or not user.groups.filter(name=SYLLABUS_TEACHER_GROUP_NAME).exists()
+        ):
+            raise forms.ValidationError(
+                "請先由 Superuser 建立啟用中的教師後台帳號並加入任課教師群組。"
+            )
+        return user
 
 
 class CourseAdminForm(forms.ModelForm):
@@ -65,6 +131,47 @@ class SectionAdminForm(forms.ModelForm):
         model = Section
         fields = "__all__"
 
+
+class CourseTeachingSyllabusInline(admin.StackedInline):
+    model = CourseTeachingSyllabus
+    form = CourseTeachingSyllabusForm
+    extra = 1
+    max_num = 1
+    can_delete = False
+    verbose_name = "02 教學大綱管理"
+    verbose_name_plural = "02 教學大綱管理"
+    description = "儲存後預設為草稿；按「確認並發布課綱」後學生才能查看。"
+    fieldsets = (
+        (None, {"fields": ("teaching_target", "teaching_matter")}),
+        ("18 週進度（展開編輯）", {
+            "classes": ("collapse",),
+            "fields": WEEK_FIELD_NAMES,
+        }),
+        (None, {"fields": ("assessment", "references")}),
+    )
+
+    def has_add_permission(self, request, obj=None):
+        course_admin = admin.site._registry[Course]
+        if obj is not None and obj.syllabus_submissions.filter(
+            status=CourseSyllabusSubmission.Status.PENDING,
+        ).exists():
+            return False
+        if obj is None:
+            return course_admin.has_add_permission(request)
+        return course_admin.has_change_permission(request, obj)
+
+    def has_change_permission(self, request, obj=None):
+        course_admin = admin.site._registry[Course]
+        if obj is not None and obj.syllabus_submissions.filter(
+            status=CourseSyllabusSubmission.Status.PENDING,
+        ).exists():
+            return False
+        if obj is None:
+            return course_admin.has_change_permission(request)
+        return course_admin.has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 class MaintainerScopedAdmin(admin.ModelAdmin):
     """課程維護員在後台只看得到自己負責系所的資料。
@@ -105,6 +212,170 @@ class SuperuserOnlyAdmin(admin.ModelAdmin):
         return is_superuser(request.user)
 
 
+class SyllabusTeacherUserCreationForm(UserCreationForm):
+    groups = forms.ModelMultipleChoiceField(
+        queryset=Group.objects.none(),
+        required=False,
+        label="群組",
+    )
+
+    class Meta(UserCreationForm.Meta):
+        model = User
+        fields = ("username", "email", "is_active", "groups")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["groups"].queryset = Group.objects.order_by("name")
+        self.fields["groups"].label_from_instance = self._group_label
+
+    @staticmethod
+    def _group_label(group):
+        return (
+            SYLLABUS_TEACHER_DISPLAY_NAME
+            if group.name == SYLLABUS_TEACHER_GROUP_NAME else group.name
+        )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        groups = cleaned_data.get("groups", ())
+        if (
+            any(group.name == SYLLABUS_TEACHER_GROUP_NAME for group in groups)
+            and not cleaned_data.get("is_active")
+        ):
+            self.add_error("is_active", "新建教師後台帳號必須保持啟用。")
+        return cleaned_data
+
+
+class SyllabusTeacherUserAdmin(DjangoUserAdmin):
+    list_display = (
+        "username", "email", "first_name", "last_name", "system_role",
+        "is_active", "is_staff", "is_superuser",
+    )
+    add_form = SyllabusTeacherUserCreationForm
+    add_fieldsets = (
+        (None, {
+            "classes": ("wide",),
+            "fields": (
+                "username", "email", "password1", "password2", "is_active",
+                "groups",
+            ),
+        }),
+    )
+
+    def has_module_permission(self, request):
+        return is_superuser(request.user)
+
+    def has_view_permission(self, request, obj=None):
+        return is_superuser(request.user)
+
+    def has_add_permission(self, request):
+        return is_superuser(request.user)
+
+    def has_change_permission(self, request, obj=None):
+        return is_superuser(request.user)
+
+    def has_delete_permission(self, request, obj=None):
+        return is_superuser(request.user)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related("groups")
+
+    @admin.display(description="系統角色")
+    def system_role(self, obj):
+        if obj.is_superuser:
+            return "超級管理員"
+        if not obj.is_active or not obj.is_staff:
+            return "一般使用者"
+        group_names = {group.name for group in obj.groups.all()}
+        if MAINTAINER_GROUP_NAME in group_names:
+            return "課程維護員"
+        if SYLLABUS_TEACHER_GROUP_NAME in group_names:
+            return "任課教師"
+        return "一般使用者"
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        field = super().formfield_for_manytomany(db_field, request, **kwargs)
+        if db_field.name == "groups" and field is not None:
+            field.label_from_instance = SyllabusTeacherUserCreationForm._group_label
+        return field
+
+    def save_model(self, request, obj, form, change):
+        selected_groups = form.cleaned_data.get("groups", ())
+        selects_teacher_group = any(
+            group.name == SYLLABUS_TEACHER_GROUP_NAME
+            for group in selected_groups
+        )
+        previously_teacher = (
+            change
+            and obj.groups.filter(name=SYLLABUS_TEACHER_GROUP_NAME).exists()
+        )
+        if selects_teacher_group and not obj.is_superuser:
+            obj.is_staff = True
+        elif (
+            previously_teacher
+            and not obj.is_superuser
+            and not selected_groups
+            and not obj.user_permissions.exists()
+        ):
+            obj.is_staff = False
+        super().save_model(request, obj, form, change)
+
+
+class SyllabusTeacherGroupAdmin(DjangoGroupAdmin):
+    list_display = ("display_name", "name", "member_count", "permission_count")
+
+    def has_module_permission(self, request):
+        return is_superuser(request.user)
+
+    def has_view_permission(self, request, obj=None):
+        return is_superuser(request.user)
+
+    def has_add_permission(self, request):
+        return is_superuser(request.user)
+
+    def has_change_permission(self, request, obj=None):
+        return is_superuser(request.user)
+
+    def has_delete_permission(self, request, obj=None):
+        if not is_superuser(request.user):
+            return False
+        return not (
+            obj is not None and obj.name == SYLLABUS_TEACHER_GROUP_NAME
+        )
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is not None and obj.name == SYLLABUS_TEACHER_GROUP_NAME:
+            return ("name", "permissions")
+        return super().get_readonly_fields(request, obj)
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if obj.name == SYLLABUS_TEACHER_GROUP_NAME:
+            obj.permissions.clear()
+
+    @admin.display(description="群組名稱")
+    def display_name(self, obj):
+        return (
+            SYLLABUS_TEACHER_DISPLAY_NAME
+            if obj.name == SYLLABUS_TEACHER_GROUP_NAME else obj.name
+        )
+
+    @admin.display(description="成員數")
+    def member_count(self, obj):
+        return obj.user_set.count()
+
+    @admin.display(description="模型權限數")
+    def permission_count(self, obj):
+        return obj.permissions.count()
+
+
+for _auth_model in (User, Group):
+    if _auth_model in admin.site._registry:
+        admin.site.unregister(_auth_model)
+admin.site.register(User, SyllabusTeacherUserAdmin)
+admin.site.register(Group, SyllabusTeacherGroupAdmin)
+
+
 @admin.register(Term)
 class TermAdmin(admin.ModelAdmin):
     list_display = ["code", "is_current", "enroll_open", "enroll_close"]
@@ -114,15 +385,169 @@ class TermAdmin(admin.ModelAdmin):
 
 
 @admin.register(Teacher)
-class TeacherAdmin(admin.ModelAdmin):
-    list_display = ["name", "email", "user"]
+class TeacherAdmin(SuperuserOnlyAdmin):
+    form = TeacherAdminForm
+    list_display = ["name", "email", "user", "course_count"]
     search_fields = ["name"]
     autocomplete_fields = ["user"]
+    actions = ["delete_selected", "deactivate_and_unlink_teacher_accounts"]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(
+            _course_count=Count("course"),
+        )
+
+    @admin.display(description="授課課程數")
+    def course_count(self, obj):
+        return obj._course_count
+
+    @staticmethod
+    def _related_record_counts(teacher):
+        courses = Course.objects.filter(teacher=teacher)
+        sections = Section.objects.filter(course__teacher=teacher)
+        return {
+            "courses": courses.count(),
+            "sections": sections.count(),
+            "enrollments": Enrollment.objects.filter(
+                section__course__teacher=teacher,
+            ).count(),
+            "waitlists": Waitlist.objects.filter(
+                section__course__teacher=teacher,
+            ).count(),
+            "official_sources": NtubOfferingSource.objects.filter(
+                teacher=teacher,
+            ).count(),
+            "fixed_schedule_entries": NtubTimetableEntry.objects.filter(
+                teacher=teacher,
+            ).count(),
+            "linked_accounts": int(teacher.user_id is not None),
+            "syllabus_submissions": CourseSyllabusSubmission.objects.filter(
+                teacher=teacher,
+            ).count(),
+            "teaching_syllabi": CourseTeachingSyllabus.objects.filter(
+                course__teacher=teacher,
+            ).count(),
+        }
+
+    @staticmethod
+    def _related_record_summary(teacher, counts):
+        labels = (
+            ("courses", "正式課程"),
+            ("sections", "開課班別"),
+            ("enrollments", "選課紀錄"),
+            ("waitlists", "候補紀錄"),
+            ("official_sources", "官方開課來源"),
+            ("fixed_schedule_entries", "班級固定課表明細"),
+            ("linked_accounts", "教師後台帳號"),
+            ("syllabus_submissions", "課綱提交歷史"),
+            ("teaching_syllabi", "人工教學大綱"),
+        )
+        details = "、".join(
+            f"{label} {counts[key]} 筆"
+            for key, label in labels if counts[key]
+        )
+        return (
+            f"教師「{teacher.name}」仍有關聯帳號或資料，為保留帳號綁定及歷史紀錄，"
+            f"禁止刪除：{details}。請改用停用教師帳號並解除綁定。"
+        )
+
+    def _raise_if_teacher_has_related_records(self, teacher):
+        counts = self._related_record_counts(teacher)
+        if any(counts.values()):
+            raise PermissionDenied(
+                self._related_record_summary(teacher, counts),
+            )
+
+    def get_deleted_objects(self, objs, request):
+        teachers = list(objs)
+        deleted_objects, model_count, perms_needed, protected = (
+            super().get_deleted_objects(teachers, request)
+        )
+        for teacher in teachers:
+            counts = self._related_record_counts(teacher)
+            if not any(counts.values()):
+                continue
+            if counts["official_sources"]:
+                # Read-only source rows are protected by the model's PROTECT
+                # relation; their Admin correctly denies deleting the source.
+                # They block deleting the Teacher but are not a missing grant.
+                perms_needed.discard(NtubOfferingSource._meta.verbose_name)
+            protected.append(
+                self._related_record_summary(teacher, counts),
+            )
+        return deleted_objects, model_count, perms_needed, protected
+
+    def delete_model(self, request, obj):
+        if not self.has_delete_permission(request, obj):
+            raise PermissionDenied("只有超級管理員可以刪除教師。")
+        self._raise_if_teacher_has_related_records(obj)
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        if not self.has_delete_permission(request):
+            raise PermissionDenied("只有超級管理員可以刪除教師。")
+        teachers = list(queryset)
+        blocked = [
+            self._related_record_summary(teacher, counts)
+            for teacher in teachers
+            if any(
+                (counts := self._related_record_counts(teacher)).values()
+            )
+        ]
+        if blocked:
+            raise PermissionDenied("批次刪除已取消，未刪除任何教師。\n" + "\n".join(blocked))
+        with transaction.atomic():
+            for teacher in teachers:
+                super().delete_model(request, teacher)
+
+    @admin.action(description="停用教師後台帳號並解除 Teacher.user 綁定")
+    def deactivate_and_unlink_teacher_accounts(self, request, queryset):
+        if not is_superuser(request.user):
+            raise PermissionDenied("只有超級管理員可以停用教師帳號並解除綁定。")
+        teachers = list(queryset.select_related("user"))
+        if any(
+            teacher.user_id
+            and (is_superuser(teacher.user) or is_maintainer(teacher.user))
+            for teacher in teachers
+        ):
+            raise PermissionDenied(
+                "選取項目包含超級管理員或課程維護員帳號；請先由管理者個別確認，"
+                "避免中斷其他管理職務。",
+            )
+        changed = 0
+        with transaction.atomic():
+            for teacher in teachers:
+                user = teacher.user
+                if user is not None:
+                    user.is_active = False
+                    user.save(update_fields=["is_active"])
+                    teacher.user = None
+                    teacher.save(update_fields=["user"])
+                    changed += 1
+        self.message_user(
+            request,
+            f"已停用並解除 {changed} 個教師後台帳號綁定；課程及歷史資料均予保留。",
+            messages.SUCCESS,
+        )
 
 
 @admin.register(Course)
 class CourseAdmin(MaintainerScopedAdmin):
     form = CourseAdminForm
+    inlines = [CourseTeachingSyllabusInline]
+    change_form_template = "admin/courses/course_change_form.html"
+    readonly_fields = ("syllabus_docx_import",)
+    fieldsets = (
+        ("01 課程基本資料", {
+            "fields": ("term", "owning_department", "code", "name", "teacher",
+                       "credits", "prerequisites"),
+        }),
+        ("舊版課綱文字（相容既有資料）", {
+            "classes": ("collapse",),
+            "fields": ("syllabus",),
+        }),
+        ("Word 課綱匯入", {"fields": ("syllabus_docx_import",)}),
+    )
     list_display = ["code", "name", "owning_department", "term", "teacher", "credits"]
     list_filter = ["term", "teacher"]
     search_fields = ["code", "name"]
@@ -138,6 +563,882 @@ class CourseAdmin(MaintainerScopedAdmin):
                 super().__init__(*args, request=request, **form_kwargs)
 
         return RequestCourseForm
+
+    def get_exclude(self, request, obj=None):
+        exclude = list(super().get_exclude(request, obj) or [])
+        if "created_by" not in exclude:
+            exclude.append("created_by")
+        return exclude
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
+    @admin.display(description="教學大綱 Word 匯入")
+    def syllabus_docx_import(self, obj):
+        if obj is None or obj.pk is None:
+            return "請先儲存課程，再使用 DOCX 匯入預覽。"
+        url = reverse("admin:courses_course_import_syllabus", args=[obj.pk])
+        return format_html(
+            '<a class="button" href="{}">選擇 DOCX 並預覽匯入</a> '
+            '<span class="help">匯入內容需人工確認；不接受 PDF。</span>',
+            url,
+        )
+
+    def get_urls(self):
+        custom_urls = [
+            path(
+                "teacher-syllabi/stats/",
+                self.admin_site.admin_view(self.teacher_dashboard_stats_view),
+                name="courses_course_teacher_stats",
+            ),
+            path(
+                "teacher-syllabi/section/<int:section_id>/roster/",
+                self.admin_site.admin_view(self.teacher_section_roster_view),
+                name="courses_course_teacher_section_roster",
+            ),
+            path(
+                "teacher-syllabi/",
+                self.admin_site.admin_view(self.teacher_syllabus_list_view),
+                name="courses_course_teacher_syllabi",
+            ),
+            path(
+                "<int:course_id>/teacher-syllabus/",
+                self.admin_site.admin_view(self.teacher_syllabus_view),
+                name="courses_course_teacher_syllabus",
+            ),
+            path(
+                "syllabus-review/",
+                self.admin_site.admin_view(self.syllabus_review_list_view),
+                name="courses_course_syllabus_review",
+            ),
+            path(
+                "syllabus-review/<int:submission_id>/",
+                self.admin_site.admin_view(self.syllabus_review_view),
+                name="courses_course_syllabus_review_detail",
+            ),
+            path(
+                "<path:object_id>/syllabus/import/",
+                self.admin_site.admin_view(self.import_syllabus_view),
+                name="courses_course_import_syllabus",
+            ),
+        ]
+        return custom_urls + super().get_urls()
+
+    @staticmethod
+    def _syllabus_form_context(form):
+        return {
+            "syllabus_form": form,
+            "basic_fields": [form[name] for name in SYLLABUS_FIELDS[:2]],
+            "weekly_fields": [form[name] for name in WEEK_FIELD_NAMES],
+            "closing_fields": [form[name] for name in SYLLABUS_FIELDS[-2:]],
+        }
+
+    @staticmethod
+    def _submission_initial(submission):
+        return {
+            "teaching_target": submission.teaching_target,
+            "teaching_matter": submission.teaching_matter,
+            **(submission.weekly_progress or {}),
+            "assessment": submission.assessment,
+            "references": submission.references,
+        }
+
+    @staticmethod
+    def _published_initial(course):
+        syllabus = CourseTeachingSyllabus.objects.filter(
+            course=course, status=CourseTeachingSyllabus.Status.PUBLISHED,
+        ).first()
+        if syllabus is None:
+            return {}
+        return {
+            "teaching_target": syllabus.teaching_target,
+            "teaching_matter": syllabus.teaching_matter,
+            **(syllabus.weekly_progress or {}),
+            "assessment": syllabus.assessment,
+            "references": syllabus.references,
+        }
+
+    def _teacher_profile(self, request):
+        if not has_teacher_syllabus_access(request.user):
+            raise PermissionDenied("需要任課教師（課綱提交）群組才能使用此頁面。")
+        teacher = Teacher.objects.filter(user=request.user).first()
+        if teacher is None:
+            raise PermissionDenied("此後台帳號尚未綁定任課教師資料。")
+        return teacher
+
+    def _teacher_dashboard_profile(self, request):
+        user = request.user
+        if (
+            not user.is_authenticated
+            or not user.is_active
+            or not user.is_staff
+            or not user.groups.filter(name=SYLLABUS_TEACHER_GROUP_NAME).exists()
+        ):
+            raise PermissionDenied("只有已授權的任課教師帳號可以使用此頁面。")
+        teacher = Teacher.objects.filter(user=user).first()
+        if teacher is None:
+            raise PermissionDenied("此後台帳號尚未綁定任課教師資料。")
+        return teacher
+
+    @staticmethod
+    def _teacher_course_queryset(teacher):
+        fixed_assignment = Q(
+            fixed_timetable_entries__teacher=teacher,
+            fixed_timetable_entries__is_active=True,
+            fixed_timetable_entries__snapshot__source_kind=(
+                NtubTimetableSnapshot.SourceKind.MAINTAINED
+            ),
+            fixed_timetable_entries__snapshot__status=(
+                NtubTimetableSnapshot.Status.PUBLISHED
+            ),
+        )
+        return Course.objects.filter(Q(teacher=teacher) | fixed_assignment).distinct()
+
+    @staticmethod
+    def _teacher_term(teacher, requested_term=""):
+        current = Term.current()
+        terms = Term.objects.filter(
+            pk__in=CourseAdmin._teacher_course_queryset(teacher).values("term_id"),
+        )
+        if current is not None:
+            terms = terms | Term.objects.filter(pk=current.pk)
+        terms = terms.distinct()
+        if requested_term:
+            term = terms.filter(pk=requested_term).first()
+            if term is None:
+                raise Http404("找不到此教師的授課學期。")
+            return term
+
+        if current is not None:
+            return current
+        return terms.first()
+
+    @staticmethod
+    def _teacher_dashboard_sections(teacher, term):
+        if term is None:
+            return []
+        return list(
+            Section.objects.filter(
+                course__teacher=teacher,
+                course__term=term,
+            ).select_related(
+                "course", "course__term",
+            ).annotate(
+                dashboard_enrolled_count=Count("enrollments", distinct=True),
+                dashboard_waiting_count=Count(
+                    "waitlists",
+                    filter=Q(waitlists__promoted_at__isnull=True),
+                    distinct=True,
+                ),
+            ).order_by("course__code", "label")
+        )
+
+    @staticmethod
+    def _teacher_section_stats(sections):
+        serialized = []
+        for section in sections:
+            enrolled = section.dashboard_enrolled_count
+            capacity = section.capacity
+            serialized.append({
+                "id": section.pk,
+                "enrolled": enrolled,
+                "waiting": section.dashboard_waiting_count,
+                "capacity": capacity,
+                "remaining": max(0, capacity - enrolled),
+                "over_capacity": enrolled > capacity,
+                "progress": min(100, round(enrolled * 100 / capacity))
+                if capacity else 100,
+            })
+        return serialized
+
+    @staticmethod
+    def _teacher_syllabus_statuses(courses):
+        course_ids = [course.pk for course in courses]
+        latest_submissions = {}
+        submissions = CourseSyllabusSubmission.objects.filter(
+            course_id__in=course_ids,
+        ).order_by("course_id", "-created_at", "-pk")
+        for submission in submissions:
+            latest_submissions.setdefault(submission.course_id, submission)
+
+        published_ids = set(CourseTeachingSyllabus.objects.filter(
+            course_id__in=course_ids,
+            status=CourseTeachingSyllabus.Status.PUBLISHED,
+        ).values_list("course_id", flat=True))
+
+        for course in courses:
+            latest = latest_submissions.get(course.pk)
+            if latest is not None:
+                course.syllabus_status = latest.get_status_display()
+                course.latest_syllabus_submission = latest
+            elif course.pk in published_ids:
+                course.syllabus_status = CourseSyllabusSubmission.Status.PUBLISHED.label
+                course.latest_syllabus_submission = None
+            else:
+                course.syllabus_status = "尚未提交"
+                course.latest_syllabus_submission = None
+
+    def _teacher_courses(self, request):
+        teacher = self._teacher_profile(request)
+        return self._teacher_course_queryset(teacher).select_related(
+            "term", "teacher",
+        ).prefetch_related(
+            "syllabus_submissions",
+            Prefetch(
+                "teaching_syllabus",
+                queryset=CourseTeachingSyllabus.objects.filter(
+                    status=CourseTeachingSyllabus.Status.PUBLISHED,
+                ),
+                to_attr="published_syllabi",
+            ),
+        )
+
+    def _teacher_status(self, course):
+        latest = next(iter(course.syllabus_submissions.all()), None)
+        if latest is not None:
+            return latest.get_status_display(), latest
+        if getattr(course, "published_syllabi", []):
+            return CourseSyllabusSubmission.Status.PUBLISHED.label, None
+        return "尚未提交", None
+
+    def teacher_syllabus_list_view(self, request):
+        if is_superuser(request.user) or is_maintainer(request.user):
+            teacher = self._teacher_profile(request)
+            polling_enabled = request.user.groups.filter(
+                name=SYLLABUS_TEACHER_GROUP_NAME,
+            ).exists()
+        else:
+            teacher = self._teacher_dashboard_profile(request)
+            polling_enabled = True
+        current = Term.current()
+        terms = Term.objects.filter(
+            pk__in=self._teacher_course_queryset(teacher).values("term_id"),
+        )
+        if current is not None:
+            terms = terms | Term.objects.filter(pk=current.pk)
+        terms = terms.distinct()
+        term = self._teacher_term(teacher, request.GET.get("term", ""))
+        courses = list(
+            self._teacher_course_queryset(teacher).filter(
+                term=term,
+            ).select_related("term", "teacher").order_by("code")
+        ) if term else []
+        self._teacher_syllabus_statuses(courses)
+        sections = self._teacher_dashboard_sections(teacher, term)
+        sections_by_course = {}
+        for section in sections:
+            section.remaining = max(
+                0, section.capacity - section.dashboard_enrolled_count,
+            )
+            section.over_capacity = (
+                section.dashboard_enrolled_count > section.capacity
+            )
+            section.progress = min(
+                100, round(
+                    section.dashboard_enrolled_count * 100 / section.capacity,
+                ),
+            ) if section.capacity else 100
+            sections_by_course.setdefault(section.course_id, []).append(section)
+        for course in courses:
+            course.section_list = sections_by_course.get(course.pk, [])
+        fixed_entries = list(
+            NtubTimetableEntry.objects.filter(
+                teacher=teacher,
+                snapshot__term=term,
+                snapshot__status=NtubTimetableSnapshot.Status.PUBLISHED,
+                is_active=True,
+                entry_type="course",
+            ).select_related(
+                "course", "snapshot__class_group", "snapshot__term",
+            ).order_by(
+                "snapshot__class_group__code", "weekday", "start_period",
+            ) if term else []
+        )
+        fixed_by_course = {}
+        for entry in fixed_entries:
+            fixed_by_course.setdefault(entry.course_id, []).append(entry)
+        for course in courses:
+            course.fixed_schedule_entries = fixed_by_course.get(course.pk, [])
+
+        summary = {
+            "course_count": len(courses),
+            "section_count": len(sections),
+            "enrolled_count": sum(
+                section.dashboard_enrolled_count for section in sections
+            ),
+            "waiting_count": sum(
+                section.dashboard_waiting_count for section in sections
+            ),
+        }
+        return TemplateResponse(request, "admin/courses/teacher_dashboard.html", {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": "教師授課管理中心",
+            "courses": courses,
+            "terms": terms,
+            "selected_term": term,
+            "summary": summary,
+            "stats_url": (
+                reverse("admin:courses_course_teacher_stats")
+                if polling_enabled else ""
+            ),
+            "initial_updated_at": timezone.localtime(),
+        })
+
+    def teacher_dashboard_stats_view(self, request):
+        if request.method != "GET":
+            return HttpResponseNotAllowed(["GET"])
+        teacher = self._teacher_dashboard_profile(request)
+        term = self._teacher_term(teacher, request.GET.get("term", ""))
+        courses = list(
+            self._teacher_course_queryset(teacher).filter(
+                term=term,
+            ).order_by("code")
+        ) if term else []
+        sections = self._teacher_dashboard_sections(teacher, term)
+        return JsonResponse({
+            "summary": {
+                "course_count": len(courses),
+                "section_count": len(sections),
+                "enrolled_count": sum(
+                    section.dashboard_enrolled_count for section in sections
+                ),
+                "waiting_count": sum(
+                    section.dashboard_waiting_count for section in sections
+                ),
+            },
+            "sections": self._teacher_section_stats(sections),
+            "updated_at": timezone.localtime().isoformat(),
+        }, headers={"Cache-Control": "no-store, private"})
+
+    def teacher_section_roster_view(self, request, section_id):
+        if request.method != "GET":
+            return HttpResponseNotAllowed(["GET"])
+        teacher = self._teacher_dashboard_profile(request)
+        section = get_object_or_404(
+            Section.objects.select_related("course", "course__term"),
+            pk=section_id, course__teacher=teacher,
+        )
+        enrollments = list(
+            Enrollment.objects.filter(section=section).select_related(
+                "user", "user__academic_profile__class_group",
+            ).order_by("created", "pk")
+        )
+        roster = []
+        for enrollment in enrollments:
+            profile = getattr(enrollment.user, "academic_profile", None)
+            class_group = profile.class_group if profile is not None else None
+            username = enrollment.user.get_username()
+            if "@" in username:
+                username = username.split("@", 1)[0]
+            roster.append({
+                "name": enrollment.user.first_name or username,
+                "class_name": class_group.name_zh if class_group else "",
+                "class_code": class_group.code if class_group else "",
+                "created": enrollment.created,
+                "status": "已選課",
+            })
+        return TemplateResponse(
+            request, "admin/courses/teacher_section_roster.html", {
+                **self.admin_site.each_context(request),
+                "opts": self.model._meta,
+                "title": f"{section.course.name}－{section.label} 班選課名單",
+                "section": section,
+                "roster": roster,
+            },
+        )
+
+    def teacher_syllabus_view(self, request, course_id):
+        teacher = self._teacher_profile(request)
+        course = get_object_or_404(
+            self._teacher_course_queryset(teacher).select_related(
+                "term", "teacher",
+            ),
+            pk=course_id,
+        )
+        latest = course.syllabus_submissions.order_by(
+            "-created_at", "-pk",
+        ).first()
+        pending = course.syllabus_submissions.filter(
+            status=CourseSyllabusSubmission.Status.PENDING,
+        ).first()
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": f"教學大綱：{course}",
+            "course": course,
+            "upload_form": SyllabusDocxUploadForm(),
+            "unresolved_labels": [],
+            "error_message": "",
+            "submission": None,
+            "is_read_only": pending is not None,
+            "return_reason": "",
+        }
+
+        if pending is not None:
+            context["submission"] = pending
+            context["form_groups"] = self._syllabus_form_context(
+                CourseSyllabusSubmissionForm(instance=pending),
+            )
+            context["status_label"] = pending.get_status_display()
+        else:
+            editable = (
+                latest if latest and latest.status == CourseSyllabusSubmission.Status.DRAFT
+                else None
+            )
+            if editable is not None:
+                context["submission"] = editable
+                previous = editable.supersedes
+                context["return_reason"] = (
+                    previous.return_reason if previous else editable.return_reason
+                )
+                initial = self._submission_initial(editable)
+                context["status_label"] = editable.get_status_display()
+            else:
+                initial = self._published_initial(course)
+                context["status_label"] = (
+                    latest.get_status_display() if latest else "尚未提交"
+                )
+                if latest and latest.status == CourseSyllabusSubmission.Status.RETURNED:
+                    context["return_reason"] = latest.return_reason
+                    context["previous_submission"] = latest
+                    initial = self._submission_initial(latest)
+                elif latest and latest.status == CourseSyllabusSubmission.Status.PUBLISHED:
+                    context["previous_submission"] = latest
+            context["form_groups"] = self._syllabus_form_context(
+                CourseSyllabusSubmissionForm(
+                    instance=editable, initial=initial,
+                ),
+            )
+
+        if request.method == "POST":
+            action = request.POST.get("teacher_action")
+            if pending is not None:
+                raise PermissionDenied("教學大綱待審核期間不可再修改。")
+            if action == "preview":
+                upload_form = SyllabusDocxUploadForm(request.POST, request.FILES)
+                context["upload_form"] = upload_form
+                if upload_form.is_valid():
+                    try:
+                        initial = parse_docx_syllabus(
+                            upload_form.cleaned_data["file"],
+                        )
+                    except DocxSyllabusError as exc:
+                        upload_form.add_error("file", str(exc))
+                    else:
+                        labels = dict(zip(
+                            SYLLABUS_FIELDS,
+                            ("教學目標", "教學內容", *WEEK_LABELS,
+                             "成績評量", "指定教科書及參考書籍"),
+                        ))
+                        unresolved = [
+                            field for field in SYLLABUS_FIELDS
+                            if not initial[field].strip()
+                        ]
+                        context.update(
+                            form_groups=self._syllabus_form_context(
+                                CourseSyllabusSubmissionForm(initial=initial),
+                            ),
+                            unresolved_labels=[
+                                labels[field] for field in unresolved
+                            ],
+                        )
+                return TemplateResponse(
+                    request, "admin/courses/teacher_syllabus_form.html", context,
+                )
+
+            if action not in {"save_draft", "submit"}:
+                context["error_message"] = "操作無效，請重新載入頁面。"
+                return TemplateResponse(
+                    request, "admin/courses/teacher_syllabus_form.html",
+                    context, status=400,
+                )
+
+            submission = None
+            submission_id = request.POST.get("submission_id", "").strip()
+            if submission_id:
+                submission = get_object_or_404(
+                    course.syllabus_submissions.filter(teacher=teacher),
+                    pk=submission_id,
+                )
+                if submission.status not in {
+                    CourseSyllabusSubmission.Status.DRAFT,
+                }:
+                    raise PermissionDenied("此提交版本目前不可修改。")
+            else:
+                if latest and latest.status == CourseSyllabusSubmission.Status.DRAFT:
+                    submission = latest
+                else:
+                    previous = latest if latest and latest.status in {
+                        CourseSyllabusSubmission.Status.RETURNED,
+                        CourseSyllabusSubmission.Status.PUBLISHED,
+                    } else None
+                    submission = CourseSyllabusSubmission(
+                        course=course, teacher=teacher, supersedes=previous,
+                    )
+
+            form = CourseSyllabusSubmissionForm(
+                request.POST, instance=submission,
+            )
+            context["form_groups"] = self._syllabus_form_context(form)
+            if form.is_valid():
+                with transaction.atomic():
+                    submission = form.save(commit=False)
+                    submission.course = course
+                    submission.teacher = teacher
+                    if action == "submit":
+                        submission.status = CourseSyllabusSubmission.Status.PENDING
+                        submission.submitted_at = timezone.now()
+                        success_message = "教學大綱已提交給課程維護員審核。"
+                    else:
+                        submission.status = CourseSyllabusSubmission.Status.DRAFT
+                        success_message = "教學大綱草稿已儲存。"
+                    submission.save()
+                self.message_user(request, success_message, messages.SUCCESS)
+                return HttpResponseRedirect(reverse(
+                    "admin:courses_course_teacher_syllabi",
+                ))
+            context["submission"] = submission
+            context["status_label"] = submission.get_status_display()
+            return TemplateResponse(
+                request, "admin/courses/teacher_syllabus_form.html",
+                context, status=400,
+            )
+
+        return TemplateResponse(
+            request, "admin/courses/teacher_syllabus_form.html", context,
+        )
+
+    def _reviewable_submissions(self, request):
+        if not (
+            is_superuser(request.user)
+            or (
+                is_maintainer(request.user)
+                and request.user.has_perm("courses.change_course")
+            )
+        ):
+            raise PermissionDenied("只有具備課程維護權限的助教可以審核。")
+        return CourseSyllabusSubmission.objects.filter(
+            course__in=scoped_courses(request.user),
+            status=CourseSyllabusSubmission.Status.PENDING,
+        ).select_related(
+            "course", "course__term", "course__teacher", "teacher",
+        )
+
+    def syllabus_review_list_view(self, request):
+        submissions = self._reviewable_submissions(request).order_by(
+            "submitted_at", "pk",
+        )
+        return TemplateResponse(request, "admin/courses/syllabus_review_list.html", {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": "待審核教學大綱",
+            "submissions": submissions,
+        })
+
+    def syllabus_review_view(self, request, submission_id):
+        queryset = self._reviewable_submissions(request)
+        submission = get_object_or_404(queryset, pk=submission_id)
+        course_admin = admin.site._registry[Course]
+        if not course_admin.has_change_permission(request, submission.course):
+            raise PermissionDenied("你沒有修改此課程教學大綱的權限。")
+
+        error_message = ""
+        if request.method == "POST":
+            with transaction.atomic():
+                submission = get_object_or_404(
+                    self._reviewable_submissions(request).select_for_update(),
+                    pk=submission_id,
+                )
+                form = CourseSyllabusSubmissionForm(
+                    request.POST, instance=submission,
+                )
+                action = request.POST.get("review_action")
+                if action not in {"publish", "return"}:
+                    error_message = "操作無效，請重新載入頁面。"
+                elif form.is_valid():
+                    return_reason = request.POST.get("return_reason", "").strip()
+                    if action == "return" and not return_reason:
+                        error_message = "請填寫退回原因。"
+                    else:
+                        submission = form.save(commit=False)
+                        submission.reviewed_by = request.user
+                        submission.reviewed_at = timezone.now()
+                        if action == "return":
+                            submission.status = CourseSyllabusSubmission.Status.RETURNED
+                            submission.return_reason = return_reason
+                            submission.save()
+                            self.message_user(
+                                request, "教學大綱已退回教師修改。",
+                                messages.SUCCESS,
+                            )
+                            return HttpResponseRedirect(reverse(
+                                "admin:courses_course_syllabus_review",
+                            ))
+
+                        syllabus, _ = CourseTeachingSyllabus.objects.get_or_create(
+                            course=submission.course,
+                        )
+                        syllabus.teaching_target = submission.teaching_target
+                        syllabus.teaching_matter = submission.teaching_matter
+                        syllabus.weekly_progress = submission.weekly_progress
+                        syllabus.assessment = submission.assessment
+                        syllabus.references = submission.references
+                        syllabus.status = CourseTeachingSyllabus.Status.PUBLISHED
+                        syllabus.updated_by = request.user
+                        syllabus.save()
+                        submission.status = CourseSyllabusSubmission.Status.PUBLISHED
+                        submission.return_reason = ""
+                        submission.save()
+                        self.message_user(
+                            request, "教學大綱已確認並發布。",
+                            messages.SUCCESS,
+                        )
+                        return HttpResponseRedirect(reverse(
+                            "admin:courses_course_syllabus_review",
+                        ))
+                context_form = form
+        else:
+            context_form = CourseSyllabusSubmissionForm(instance=submission)
+
+        return TemplateResponse(request, "admin/courses/syllabus_review_form.html", {
+            **self.admin_site.each_context(request),
+            **self._syllabus_form_context(context_form),
+            "opts": self.model._meta,
+            "title": f"審核教學大綱：{submission.course}",
+            "submission": submission,
+            "course": submission.course,
+            "error_message": error_message,
+            "return_reason": request.POST.get(
+                "return_reason", submission.return_reason,
+            ),
+        }, status=400 if request.method == "POST" and error_message else 200)
+
+    def import_syllabus_view(self, request, object_id):
+        course = self.get_object(request, object_id)
+        if course is None:
+            raise Http404
+        if not self.has_change_permission(request, course):
+            raise PermissionDenied
+
+        existing = getattr(course, "teaching_syllabus", None)
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": f"匯入教學大綱：{course}",
+            "course": course,
+            "phase": "upload",
+            "upload_form": SyllabusDocxUploadForm(),
+            "syllabus_form": None,
+            "unresolved": [],
+            "error_message": "",
+        }
+        if existing and existing.status == CourseTeachingSyllabus.Status.PUBLISHED:
+            context.update(
+                phase="blocked",
+                error_message=(
+                    "此課程已有已發布的教學大綱。為避免覆蓋學生正在查看的內容，"
+                    "請勿重新匯入；請使用課程編輯頁明確修改並重新發布。"
+                ),
+                existing_syllabus=existing,
+            )
+            return TemplateResponse(
+                request, "admin/courses/course_syllabus_import.html", context,
+                status=409 if request.method == "POST" else 200,
+            )
+
+        action = request.POST.get("import_action") if request.method == "POST" else ""
+        if action == "preview":
+            upload_form = SyllabusDocxUploadForm(request.POST, request.FILES)
+            context["upload_form"] = upload_form
+            if upload_form.is_valid():
+                try:
+                    initial = parse_docx_syllabus(upload_form.cleaned_data["file"])
+                except DocxSyllabusError as exc:
+                    upload_form.add_error("file", str(exc))
+                else:
+                    unresolved_fields = [
+                        field_name for field_name in SYLLABUS_FIELDS
+                        if not initial[field_name].strip()
+                    ]
+                    field_labels = dict(zip(
+                        SYLLABUS_FIELDS,
+                        ("教學目標", "教學內容", *WEEK_LABELS,
+                         "成績評量", "指定教科書及參考書籍"),
+                    ))
+                    context.update(
+                        phase="preview",
+                        syllabus_form=CourseTeachingSyllabusForm(initial=initial),
+                        unresolved_fields=unresolved_fields,
+                        unresolved_labels=[
+                            field_labels[field_name]
+                            for field_name in unresolved_fields
+                        ],
+                    )
+            return TemplateResponse(
+                request, "admin/courses/course_syllabus_import.html", context,
+            )
+
+        if action == "confirm":
+            existing = getattr(course, "teaching_syllabus", None)
+            if existing and existing.status == CourseTeachingSyllabus.Status.PUBLISHED:
+                context.update(
+                    phase="blocked",
+                    error_message="課綱已發布，匯入確認遭拒；原有已發布內容未變更。",
+                    existing_syllabus=existing,
+                )
+                return TemplateResponse(
+                    request, "admin/courses/course_syllabus_import.html",
+                    context, status=409,
+                )
+            syllabus_form = CourseTeachingSyllabusForm(
+                request.POST, instance=existing,
+            )
+            context.update(phase="preview", syllabus_form=syllabus_form)
+            if syllabus_form.is_valid():
+                syllabus = syllabus_form.save(commit=False)
+                syllabus.course = course
+                syllabus.status = CourseTeachingSyllabus.Status.DRAFT
+                syllabus.updated_by = request.user
+                syllabus.save()
+                self.message_user(
+                    request,
+                    "DOCX 內容已儲存為草稿；請檢查欄位並按「確認並發布課綱」公開。",
+                    messages.SUCCESS,
+                )
+                return HttpResponseRedirect(
+                    reverse("admin:courses_course_change", args=[course.pk])
+                )
+            return TemplateResponse(
+                request, "admin/courses/course_syllabus_import.html", context,
+                status=400,
+            )
+
+        if request.method == "POST":
+            context["error_message"] = "匯入步驟無效，請重新選擇 DOCX 檔案。"
+        return TemplateResponse(
+            request, "admin/courses/course_syllabus_import.html", context,
+        )
+
+    def save_formset(self, request, form, formset, change):
+        if formset.model is not CourseTeachingSyllabus:
+            return super().save_formset(request, form, formset, change)
+        instances = formset.save(commit=False)
+        published_syllabus_exists = formset.queryset.filter(
+            status=CourseTeachingSyllabus.Status.PUBLISHED,
+        ).exists()
+        if (published_syllabus_exists and formset.has_changed()
+                and "_publish_syllabus" not in request.POST):
+            self.message_user(
+                request,
+                "已發布課綱未被修改。若要套用目前編輯內容，請使用「確認並發布課綱」。",
+                messages.WARNING,
+            )
+            return
+        for instance in instances:
+            instance.updated_by = request.user
+            instance.status = (
+                CourseTeachingSyllabus.Status.PUBLISHED
+                if "_publish_syllabus" in request.POST
+                else CourseTeachingSyllabus.Status.DRAFT
+            )
+            instance.save()
+        formset.save_m2m()
+
+    def save_related(self, request, form, formsets, change):
+        syllabus_formset_changed = any(
+            formset.model is CourseTeachingSyllabus and formset.has_changed()
+            for formset in formsets
+        )
+        super().save_related(request, form, formsets, change)
+        syllabus = getattr(form.instance, "teaching_syllabus", None)
+        if "_publish_syllabus" in request.POST:
+            if syllabus is None:
+                self.message_user(
+                    request, "尚未建立教學大綱，無法發布。",
+                    messages.ERROR,
+                )
+                return
+            syllabus.status = CourseTeachingSyllabus.Status.PUBLISHED
+            syllabus.updated_by = request.user
+            syllabus.save(update_fields=("status", "updated_by", "updated_at"))
+            self.message_user(request, "教學大綱已確認並發布。", messages.SUCCESS)
+        elif syllabus is not None and syllabus_formset_changed:
+            if syllabus.status == CourseTeachingSyllabus.Status.DRAFT:
+                syllabus.updated_by = request.user
+                syllabus.save(update_fields=("updated_by", "updated_at"))
+                self.message_user(
+                    request,
+                    "教學大綱已儲存為草稿，學生目前看不到此版本。",
+                    messages.INFO,
+                )
+
+    def _can_delete_object(self, request, obj):
+        if is_superuser(request.user):
+            return True
+        return (
+            obj.created_by_id == request.user.pk
+            and obj.owning_department_id is not None
+            and scoped_departments(request.user).filter(
+                pk=obj.owning_department_id).exists())
+
+    def has_delete_permission(self, request, obj=None):
+        if not (is_superuser(request.user)
+                or request.user.has_perm("courses.delete_course")):
+            return False
+        if obj is None:
+            return True
+        return is_superuser(request.user) or self._can_delete_object(request, obj)
+
+    @staticmethod
+    def _check_delete_dependencies(obj):
+        sections = obj.sections.all()
+        if sections.filter(enrollments__isnull=False).exists():
+            raise PermissionDenied("課程仍有加選紀錄，不能刪除。")
+        if sections.filter(waitlists__isnull=False).exists():
+            raise PermissionDenied("課程仍有候補紀錄，不能刪除。")
+        if obj.ntub_offering_sources.exists():
+            raise PermissionDenied("課程仍有官方開課來源，不能刪除。")
+        if obj.sections.filter(class_policies__isnull=False).exists():
+            raise PermissionDenied("課程仍有班別修課政策，不能刪除。")
+
+    def _check_delete_sections(self, request, obj):
+        for section in obj.sections.all():
+            if not SectionAdmin._can_delete_object(
+                    admin.site._registry[Section], request, section):
+                raise PermissionDenied(
+                    f"課程包含不能由目前帳號刪除的班別：{section}。")
+
+    @admin.action(
+        permissions=["delete"],
+        description="刪除所選課程",
+    )
+    def delete_selected(self, request, queryset):
+        for obj in queryset.select_related("owning_department"):
+            self._validate_delete(request, obj)
+        return django_delete_selected(self, request, queryset)
+
+    def _validate_delete(self, request, obj):
+        if not self.has_delete_permission(request, obj):
+            raise PermissionDenied("你沒有刪除此課程的權限。")
+        if not is_superuser(request.user) and not self._can_delete_object(request, obj):
+            raise PermissionDenied(
+                "維護員只能刪除自己建立且屬於授權系所的課程；舊資料不得推測建立者。")
+        self._check_delete_dependencies(obj)
+        self._check_delete_sections(request, obj)
+
+    def delete_model(self, request, obj):
+        self._validate_delete(request, obj)
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        with transaction.atomic():
+            for obj in queryset.select_related("owning_department"):
+                self._validate_delete(request, obj)
+            for obj in queryset.select_related("owning_department"):
+                super().delete_model(request, obj)
 
 
 @admin.register(Section)
@@ -158,6 +1459,73 @@ class SectionAdmin(MaintainerScopedAdmin):
                 super().__init__(*args, request=request, **form_kwargs)
 
         return RequestSectionForm
+
+    def get_exclude(self, request, obj=None):
+        exclude = list(super().get_exclude(request, obj) or [])
+        if "created_by" not in exclude:
+            exclude.append("created_by")
+        return exclude
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
+    def _can_delete_object(self, request, obj):
+        if is_superuser(request.user):
+            return True
+        return (
+            obj.created_by_id == request.user.pk
+            and obj.course.owning_department_id is not None
+            and scoped_departments(request.user).filter(
+                pk=obj.course.owning_department_id).exists())
+
+    def has_delete_permission(self, request, obj=None):
+        if not (is_superuser(request.user)
+                or request.user.has_perm("courses.delete_section")):
+            return False
+        if obj is None:
+            return True
+        if is_superuser(request.user):
+            return True
+        return self._can_delete_object(request, obj)
+
+    @staticmethod
+    def _check_delete_dependencies(obj):
+        if obj.enrollments.exists():
+            raise PermissionDenied("班別仍有加選紀錄，不能刪除。")
+        if obj.waitlists.exists():
+            raise PermissionDenied("班別仍有候補紀錄，不能刪除。")
+        if obj.ntub_offering_sources.exists():
+            raise PermissionDenied("班別仍有官方開課來源，不能刪除。")
+
+    @admin.action(
+        permissions=["delete"],
+        description="刪除所選班別",
+    )
+    def delete_selected(self, request, queryset):
+        for obj in queryset.select_related("course"):
+            self._validate_delete(request, obj)
+        return django_delete_selected(self, request, queryset)
+
+    def _validate_delete(self, request, obj):
+        if not self.has_delete_permission(request, obj):
+            raise PermissionDenied("你沒有刪除此班別的權限。")
+        if not is_superuser(request.user) and not self._can_delete_object(request, obj):
+            raise PermissionDenied(
+                "維護員只能刪除自己建立且屬於授權系所的班別；舊資料不得推測建立者。")
+        self._check_delete_dependencies(obj)
+
+    def delete_model(self, request, obj):
+        self._validate_delete(request, obj)
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        with transaction.atomic():
+            for obj in queryset.select_related("course"):
+                self._validate_delete(request, obj)
+            for obj in queryset.select_related("course"):
+                super().delete_model(request, obj)
 
 
 @admin.register(Enrollment)
@@ -261,21 +1629,849 @@ class ScopedReadOnlyAdmin(ReadOnlyTimetableAdmin, MaintainerScopedAdmin):
 
 @admin.register(NtubTimetableSnapshot)
 class NtubTimetableSnapshotAdmin(ScopedReadOnlyAdmin):
-    list_display = ["term", "class_group", "class_name", "source_url",
-                    "retrieved_at", "entry_count"]
+    list_display = [
+        "term", "class_group", "class_name", "source_label",
+        "publication_state", "managed_by", "entry_count",
+    ]
     list_filter = ["term", "class_group__department__program_type"]
     search_fields = ["class_group__code", "class_group__name_zh", "class_name"]
     list_select_related = ["class_group", "term"]
     date_hierarchy = "retrieved_at"
     change_list_template = "admin/courses/ntubtimetablesnapshot/change_list.html"
+    actions = ["publish_selected", "withdraw_selected", "delete_selected"]
+
+    def scope_queryset(self, request, queryset):
+        return queryset.filter(class_group__in=scoped_class_groups(request.user))
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        if is_superuser(request.user):
+            return True
+        if not (
+            request.user.is_authenticated
+            and request.user.has_perm("courses.delete_ntubtimetablesnapshot")
+        ):
+            return False
+        if obj is None:
+            return True
+        return (
+            obj.source_kind == NtubTimetableSnapshot.SourceKind.MAINTAINED
+            and obj.status == NtubTimetableSnapshot.Status.DRAFT
+            and scoped_class_groups(request.user).filter(
+                pk=obj.class_group_id,
+            ).exists()
+        )
+
+    def delete_model(self, request, obj):
+        self._validate_snapshot_delete(request, obj)
+        with transaction.atomic():
+            self._archive_imported_fallback(obj)
+            super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        snapshot_ids = list(queryset.values_list("pk", flat=True))
+        with transaction.atomic():
+            snapshots = list(
+                self.get_queryset(request).select_for_update().filter(
+                    pk__in=snapshot_ids,
+                ).select_related("class_group", "term")
+            )
+            if len(snapshots) != len(snapshot_ids):
+                raise PermissionDenied("刪除清單包含無權管理的固定課表。")
+            for snapshot in snapshots:
+                self._validate_snapshot_delete(request, snapshot)
+            for snapshot in snapshots:
+                self._archive_imported_fallback(snapshot)
+            super().delete_queryset(
+                request, self.model.objects.filter(pk__in=snapshot_ids),
+            )
+
+    def _validate_snapshot_delete(self, request, snapshot):
+        if not self.has_delete_permission(request, snapshot):
+            raise PermissionDenied(
+                "只有 Superuser 可清理歷史或已發布版本；維護員僅能刪除"
+                "自己授權系所中的草稿。"
+            )
+        if not is_superuser(request.user) and not scoped_class_groups(
+            request.user,
+        ).filter(pk=snapshot.class_group_id).exists():
+            raise PermissionDenied("你沒有管理此班級固定課表的權限。")
+
+    @staticmethod
+    def _archive_imported_fallback(snapshot):
+        if (
+            snapshot.source_kind == NtubTimetableSnapshot.SourceKind.MAINTAINED
+            and snapshot.status == NtubTimetableSnapshot.Status.PUBLISHED
+        ):
+            NtubTimetableSnapshot.objects.filter(
+                class_group_id=snapshot.class_group_id,
+                term_id=snapshot.term_id,
+                source_kind=NtubTimetableSnapshot.SourceKind.IMPORTED,
+                status=NtubTimetableSnapshot.Status.PUBLISHED,
+            ).update(status=NtubTimetableSnapshot.Status.ARCHIVED)
+
+    @admin.action(description="發布選定的草稿課表")
+    def publish_selected(self, request, queryset):
+        self._ensure_fixed_schedule_access(request)
+        snapshot_ids = list(queryset.values_list("pk", flat=True))
+        if not snapshot_ids:
+            self.message_user(request, "請先選擇草稿課表。", messages.WARNING)
+            return
+        with transaction.atomic():
+            snapshots = list(
+                self.get_queryset(request).select_for_update().filter(
+                    pk__in=snapshot_ids,
+                ).select_related("class_group", "term")
+            )
+            if len(snapshots) != len(snapshot_ids):
+                raise PermissionDenied("發布清單包含無權管理的固定課表。")
+            for snapshot in snapshots:
+                if (
+                    snapshot.source_kind != NtubTimetableSnapshot.SourceKind.MAINTAINED
+                    or snapshot.status != NtubTimetableSnapshot.Status.DRAFT
+                ):
+                    self.message_user(
+                        request, "批次發布只接受人工維護的草稿版本。",
+                        messages.ERROR,
+                    )
+                    return
+                if not is_superuser(request.user) and not scoped_class_groups(
+                    request.user,
+                ).filter(pk=snapshot.class_group_id).exists():
+                    raise PermissionDenied("選取的課表包含未授權系所。")
+                error = self._fixed_schedule_publish_error(snapshot)
+                if error:
+                    self.message_user(
+                        request,
+                        f"{snapshot.class_group.code}／{snapshot.term.code}：{error}",
+                        messages.ERROR,
+                    )
+                    return
+            for snapshot in snapshots:
+                self._publish_fixed_schedule(snapshot, request.user)
+        self.message_user(
+            request, f"已發布 {len(snapshots)} 個班級固定課表版本。",
+            messages.SUCCESS,
+        )
+
+    @admin.action(description="撤回選定的已發布課表")
+    def withdraw_selected(self, request, queryset):
+        self._ensure_fixed_schedule_access(request)
+        snapshot_ids = list(queryset.values_list("pk", flat=True))
+        if not snapshot_ids:
+            self.message_user(request, "請先選擇已發布的人工課表。", messages.WARNING)
+            return
+        with transaction.atomic():
+            snapshots = list(
+                self.get_queryset(request).select_for_update().filter(
+                    pk__in=snapshot_ids,
+                ).select_related("class_group", "term")
+            )
+            if len(snapshots) != len(snapshot_ids):
+                raise PermissionDenied("撤回清單包含無權管理的固定課表。")
+            if any(
+                snapshot.source_kind != NtubTimetableSnapshot.SourceKind.MAINTAINED
+                or snapshot.status != NtubTimetableSnapshot.Status.PUBLISHED
+                for snapshot in snapshots
+            ):
+                self.message_user(
+                    request, "批次撤回只接受已發布的人工維護版本。",
+                    messages.ERROR,
+                )
+                return
+            for snapshot in snapshots:
+                self._withdraw_fixed_schedule(snapshot)
+        self.message_user(
+            request,
+            f"已撤回 {len(snapshots)} 個版本；學生課表不會自動回退到官方匯入資料。",
+            messages.SUCCESS,
+        )
+
+    @admin.action(permissions=["delete"], description="依確認頁面清理選定的課表版本")
+    def delete_selected(self, request, queryset):
+        for snapshot in queryset.select_related("class_group", "term"):
+            self._validate_snapshot_delete(request, snapshot)
+        return django_delete_selected(self, request, queryset)
+
+    def get_list_display(self, request):
+        def operations(snapshot):
+            return self.snapshot_operations(request, snapshot)
+
+        operations.short_description = "操作"
+        return [*self.list_display, operations]
+
+    def snapshot_operations(self, request, snapshot):
+        detail_url = reverse(
+            "admin:courses_ntubtimetablesnapshot_fixed_schedule_detail",
+            args=[snapshot.class_group_id, snapshot.term_id],
+        )
+        source_url = reverse(
+            "admin:courses_ntubtimetablesnapshot_source_detail",
+            args=[snapshot.pk],
+        )
+        delete_url = reverse(
+            "admin:courses_ntubtimetablesnapshot_delete",
+            args=[snapshot.pk],
+        )
+        controls = [format_html('<a href="{}">查看課表</a>', detail_url)]
+
+        def post_button(url, label):
+            return format_html(
+                '<button class="fixed-schedule-row-action" type="submit" '
+                'form="fixed-schedule-row-action" formaction="{}">{}</button>',
+                url, label,
+            )
+
+        if snapshot.source_kind == NtubTimetableSnapshot.SourceKind.IMPORTED:
+            controls = [format_html('<a href="{}">查看來源</a>', source_url)]
+            controls.append(post_button(
+                reverse(
+                    "admin:courses_ntubtimetablesnapshot_source_takeover",
+                    args=[snapshot.pk],
+                ),
+                "接管編輯",
+            ))
+            if is_superuser(request.user):
+                controls.append(format_html(
+                    '<a href="{}">確認影響後清理</a>', delete_url,
+                ))
+        elif snapshot.status == NtubTimetableSnapshot.Status.DRAFT:
+            controls.append(post_button(
+                reverse(
+                    "admin:courses_ntubtimetablesnapshot_fixed_schedule_publish",
+                    args=[snapshot.class_group_id, snapshot.term_id],
+                ),
+                "發布",
+            ))
+            if self.has_delete_permission(request, snapshot):
+                controls.append(format_html(
+                    '<a href="{}">刪除草稿</a>', delete_url,
+                ))
+        elif snapshot.status == NtubTimetableSnapshot.Status.PUBLISHED:
+            controls.append(post_button(
+                reverse(
+                    "admin:courses_ntubtimetablesnapshot_fixed_schedule_takeover",
+                    args=[snapshot.class_group_id, snapshot.term_id],
+                ),
+                "建立修改草稿",
+            ))
+            controls.append(post_button(
+                reverse(
+                    "admin:courses_ntubtimetablesnapshot_fixed_schedule_withdraw",
+                    args=[snapshot.pk],
+                ),
+                "撤回發布",
+            ))
+            if is_superuser(request.user):
+                controls.append(format_html(
+                    '<a href="{}">安全刪除</a>', delete_url,
+                ))
+        elif is_superuser(request.user):
+            controls.append(format_html(
+                '<a href="{}">確認影響後清理</a>', delete_url,
+            ))
+        return format_html_join(
+            " · ", "{}", ((control,) for control in controls),
+        )
+
+    @admin.display(description="版本來源")
+    def source_label(self, obj):
+        return obj.get_source_kind_display()
+
+    @admin.display(description="發布狀態")
+    def publication_state(self, obj):
+        if obj.status == NtubTimetableSnapshot.Status.ARCHIVED:
+            return "已撤回／封存"
+        if obj.source_kind == NtubTimetableSnapshot.SourceKind.IMPORTED:
+            return "可供人工版本缺席時顯示" if obj.status == (
+                NtubTimetableSnapshot.Status.PUBLISHED
+            ) else obj.get_status_display()
+        return obj.get_status_display()
+
+    delete_confirmation_template = (
+        "admin/courses/ntubtimetablesnapshot/delete_confirmation.html"
+    )
+
+    def delete_view(self, request, object_id, extra_context=None):
+        snapshot = self.get_object(request, object_id)
+        context = dict(extra_context or {})
+        if snapshot is not None:
+            course_ids = snapshot.entries.exclude(
+                course_id=None,
+            ).values_list("course_id", flat=True)
+            section_ids = Section.objects.filter(
+                course_id__in=course_ids,
+            ).values_list("pk", flat=True)
+            context.update({
+                "snapshot_entry_count": snapshot.entries.count(),
+                "snapshot_syllabus_count": snapshot.teaching_syllabi.count(),
+                "snapshot_course_count": snapshot.entries.exclude(
+                    course_id=None,
+                ).values("course_id").distinct().count(),
+                "snapshot_teacher_count": snapshot.entries.exclude(
+                    teacher_id=None,
+                ).values("teacher_id").distinct().count(),
+                "snapshot_section_count": Section.objects.filter(
+                    pk__in=section_ids,
+                ).count(),
+                "snapshot_enrollment_count": Enrollment.objects.filter(
+                    section_id__in=section_ids,
+                ).count(),
+                "snapshot_waitlist_count": Waitlist.objects.filter(
+                    section_id__in=section_ids,
+                ).count(),
+                "snapshot_archives_imported": (
+                    snapshot.source_kind
+                    == NtubTimetableSnapshot.SourceKind.MAINTAINED
+                    and snapshot.status == NtubTimetableSnapshot.Status.PUBLISHED
+                ),
+            })
+        return super().delete_view(request, object_id, extra_context=context)
+
+    def get_deleted_objects(self, objs, request):
+        snapshots = list(objs)
+        deleted_objects, model_count, perms_needed, protected = super().get_deleted_objects(
+            snapshots, request)
+        if snapshots and all(
+            self.has_delete_permission(request, snapshot)
+            for snapshot in snapshots
+        ):
+            # Entries are cascade-owned by a snapshot; this does not grant their
+            # standalone Admin delete permission.
+            perms_needed.discard(NtubTimetableEntry._meta.verbose_name)
+            if is_superuser(request.user):
+                perms_needed.discard(OfficialTeachingSyllabus._meta.verbose_name)
+        syllabus_count = sum(
+            snapshot.teaching_syllabi.count() for snapshot in snapshots
+        )
+        if syllabus_count:
+            deleted_objects.append(f"官方教學大綱（{syllabus_count} 份）")
+        return deleted_objects, model_count, perms_needed, protected
 
     def get_urls(self):
         urls = super().get_urls()
         custom = [
+            path(
+                "fixed-schedule/",
+                self.admin_site.admin_view(self.fixed_schedule_list_view),
+                name="courses_ntubtimetablesnapshot_fixed_schedule",
+            ),
+            path(
+                "fixed-schedule/<int:class_group_id>/<int:term_id>/",
+                self.admin_site.admin_view(self.fixed_schedule_detail_view),
+                name="courses_ntubtimetablesnapshot_fixed_schedule_detail",
+            ),
+            path(
+                "fixed-schedule/snapshot/<int:snapshot_id>/",
+                self.admin_site.admin_view(self.fixed_schedule_snapshot_view),
+                name="courses_ntubtimetablesnapshot_source_detail",
+            ),
+            path(
+                "fixed-schedule/snapshot/<int:snapshot_id>/takeover/",
+                self.admin_site.admin_view(self.fixed_schedule_source_takeover_view),
+                name="courses_ntubtimetablesnapshot_source_takeover",
+            ),
+            path(
+                "fixed-schedule/<int:class_group_id>/<int:term_id>/takeover/",
+                self.admin_site.admin_view(self.fixed_schedule_takeover_view),
+                name="courses_ntubtimetablesnapshot_fixed_schedule_takeover",
+            ),
+            path(
+                "fixed-schedule/<int:class_group_id>/<int:term_id>/publish/",
+                self.admin_site.admin_view(self.fixed_schedule_publish_view),
+                name="courses_ntubtimetablesnapshot_fixed_schedule_publish",
+            ),
+            path(
+                "fixed-schedule/snapshot/<int:snapshot_id>/withdraw/",
+                self.admin_site.admin_view(self.fixed_schedule_withdraw_view),
+                name="courses_ntubtimetablesnapshot_fixed_schedule_withdraw",
+            ),
+            path(
+                "fixed-schedule/<int:class_group_id>/<int:term_id>/entry/add/",
+                self.admin_site.admin_view(self.fixed_schedule_entry_edit_view),
+                name="courses_ntubtimetablesnapshot_fixed_schedule_entry_add",
+            ),
+            path(
+                "fixed-schedule/<int:class_group_id>/<int:term_id>/entry/<int:entry_id>/change/",
+                self.admin_site.admin_view(self.fixed_schedule_entry_edit_view),
+                name="courses_ntubtimetablesnapshot_fixed_schedule_entry_change",
+            ),
+            path(
+                "fixed-schedule/<int:class_group_id>/<int:term_id>/entry/<int:entry_id>/delete/",
+                self.admin_site.admin_view(self.fixed_schedule_entry_delete_view),
+                name="courses_ntubtimetablesnapshot_fixed_schedule_entry_delete",
+            ),
             path("sync-official/", self.admin_site.admin_view(self.sync_official),
                  name="courses_ntubtimetablesnapshot_sync_official"),
         ]
         return custom + urls
+
+    @staticmethod
+    def _ensure_fixed_schedule_access(request):
+        user = request.user
+        if not (
+            user.is_authenticated and user.is_active and user.is_staff
+            and (is_superuser(user) or is_maintainer(user))
+        ):
+            raise PermissionDenied("只有已授權的課程維護員可以管理班級固定課表。")
+        if not is_superuser(user) and not scoped_departments(user).exists():
+            raise PermissionDenied("目前帳號沒有可管理的授權系所。")
+
+    @staticmethod
+    def _fixed_schedule_class_group(user, class_group_id):
+        return get_object_or_404(
+            scoped_class_groups(user).select_related(
+                "department", "department__program_type",
+            ),
+            pk=class_group_id,
+        )
+
+    @staticmethod
+    def _fixed_schedule_term(term_id):
+        return get_object_or_404(Term, pk=term_id)
+
+    def _fixed_schedule_draft(self, class_group, term):
+        return NtubTimetableSnapshot.objects.filter(
+            class_group=class_group, term=term,
+            source_kind=NtubTimetableSnapshot.SourceKind.MAINTAINED,
+            status=NtubTimetableSnapshot.Status.DRAFT,
+        ).first()
+
+    def _fixed_schedule_published(self, class_group, term):
+        return NtubTimetableSnapshot.objects.filter(
+            class_group=class_group, term=term,
+            source_kind=NtubTimetableSnapshot.SourceKind.MAINTAINED,
+            status=NtubTimetableSnapshot.Status.PUBLISHED,
+        ).order_by("-published_at", "-pk").first()
+
+    def _fixed_schedule_imported(self, class_group, term):
+        return NtubTimetableSnapshot.objects.filter(
+            class_group=class_group, term=term,
+            source_kind=NtubTimetableSnapshot.SourceKind.IMPORTED,
+            status=NtubTimetableSnapshot.Status.PUBLISHED,
+        ).first()
+
+    def fixed_schedule_list_view(self, request):
+        self._ensure_fixed_schedule_access(request)
+        initial = {}
+        current_term = Term.current()
+        if current_term is not None:
+            initial["term"] = current_term.pk
+        form = FixedScheduleSelectionForm(
+            request.GET or None, user=request.user, initial=initial,
+        )
+        if request.method == "GET" and request.GET and form.is_valid():
+            return HttpResponseRedirect(reverse(
+                "admin:courses_ntubtimetablesnapshot_fixed_schedule_detail",
+                args=[
+                    form.cleaned_data["class_group"].pk,
+                    form.cleaned_data["term"].pk,
+                ],
+            ))
+        return TemplateResponse(
+            request, "admin/courses/fixed_schedule_list.html", {
+                **self.admin_site.each_context(request),
+                "opts": self.model._meta,
+                "title": "班級固定課表",
+                "form": form,
+            },
+        )
+
+    def fixed_schedule_detail_view(self, request, class_group_id, term_id):
+        self._ensure_fixed_schedule_access(request)
+        class_group = self._fixed_schedule_class_group(request.user, class_group_id)
+        term = self._fixed_schedule_term(term_id)
+        draft = self._fixed_schedule_draft(class_group, term)
+        published = self._fixed_schedule_published(class_group, term)
+        imported = self._fixed_schedule_imported(class_group, term)
+        current = draft or published or imported
+        entries = list(
+            current.entries.select_related("teacher", "course").order_by(
+                "weekday", "start_period", "id",
+            ) if current else NtubTimetableEntry.objects.none()
+        )
+        course_admin = admin.site._registry[Course]
+        visible_courses = {
+            course.code: course
+            for course in course_admin.get_queryset(request).filter(term=term)
+        }
+        for entry in entries:
+            managed_course = entry.course or visible_courses.get(entry.course_code)
+            entry.managed_course_url = (
+                reverse("admin:courses_course_change", args=[managed_course.pk])
+                if managed_course is not None
+                and course_admin.has_change_permission(request, managed_course)
+                else ""
+            )
+        weekly_grid = build_week_grid(
+            [
+                GridItem(
+                    kind=(
+                        KIND_OFFICIAL_COURSE if entry.entry_type == "course"
+                        else KIND_OFFICIAL_ACTIVITY
+                    ),
+                    day=entry.weekday,
+                    start_period=entry.start_period,
+                    end_period=entry.end_period,
+                    title=entry.course_name,
+                    subtitle=(
+                        entry.teacher.name if entry.teacher_id
+                        else entry.teacher_name
+                    ),
+                    meta=entry.classroom,
+                )
+                for entry in entries if entry.is_active
+            ],
+            base_periods=base_periods_for(
+                class_group.department.program_type.code,
+            ),
+        )
+        return TemplateResponse(
+            request, "admin/courses/fixed_schedule_detail.html", {
+                **self.admin_site.each_context(request),
+                "opts": self.model._meta,
+                "title": f"{class_group.name_zh or class_group.code} 固定課表",
+                "class_group": class_group,
+                "term": term,
+                "draft": draft,
+                "published": published,
+                "imported": imported,
+                "current": current,
+                "entries": entries,
+                "weekly_grid": weekly_grid,
+                "can_edit": draft is not None,
+            },
+        )
+
+    def fixed_schedule_snapshot_view(self, request, snapshot_id):
+        self._ensure_fixed_schedule_access(request)
+        snapshot = get_object_or_404(
+            self.get_queryset(request).select_related(
+                "class_group__department__program_type", "term", "managed_by",
+            ).prefetch_related("entries__teacher", "entries__course"),
+            pk=snapshot_id,
+        )
+        return TemplateResponse(
+            request,
+            "admin/courses/fixed_schedule_snapshot_source.html",
+            {
+                **self.admin_site.each_context(request),
+                "opts": self.model._meta,
+                "title": f"{snapshot.class_group.code} 課表版本來源",
+                "snapshot": snapshot,
+                "entries": snapshot.entries.all(),
+            },
+        )
+
+    def _create_fixed_schedule_draft(
+        self, request, class_group, term, source_snapshot=None,
+    ):
+        existing_draft = self._fixed_schedule_draft(class_group, term)
+        if existing_draft is not None:
+            return existing_draft
+        source = source_snapshot or (
+            self._fixed_schedule_published(class_group, term)
+            or self._fixed_schedule_imported(class_group, term)
+        )
+        snapshot = NtubTimetableSnapshot.objects.create(
+            class_group=class_group,
+            term=term,
+            class_name=class_group.name_zh,
+            source_kind=NtubTimetableSnapshot.SourceKind.MAINTAINED,
+            status=NtubTimetableSnapshot.Status.DRAFT,
+            managed_by=request.user,
+            supersedes=source,
+        )
+        if source is not None:
+            for entry in source.entries.all().order_by("id"):
+                course = entry.course
+                if course is None and entry.entry_type == "course" and entry.course_code:
+                    course = Course.objects.filter(
+                        term=term, code=entry.course_code,
+                    ).first()
+                credits = entry.credits
+                if credits is None and entry.entry_type == "course":
+                    verified_credit = OfficialCourseCredit.objects.filter(
+                        term=term, class_group=class_group,
+                        course_code=entry.course_code,
+                    ).first()
+                    if verified_credit is not None:
+                        credits = verified_credit.credits
+                    else:
+                        official_syllabus = OfficialTeachingSyllabus.objects.filter(
+                            academic_year=term.code.split("-", 1)[0],
+                            semester=term.code.split("-", 1)[1],
+                            class_code=class_group.code,
+                            official_serial=entry.official_serial,
+                            course_code=entry.course_code,
+                            status="success",
+                        ).first()
+                        if (
+                            official_syllabus is not None
+                            and official_syllabus.credits is not None
+                            and official_syllabus.credits
+                            == official_syllabus.credits.to_integral_value()
+                        ):
+                            credits = int(official_syllabus.credits)
+                NtubTimetableEntry.objects.create(
+                    snapshot=snapshot,
+                    course=course,
+                    entry_type=entry.entry_type,
+                    course_code=entry.course_code,
+                    official_serial=entry.official_serial,
+                    course_name=entry.course_name,
+                    teacher=entry.teacher or (course.teacher if course else None),
+                    teacher_name=entry.teacher_name,
+                    credits=credits,
+                    classroom=entry.classroom,
+                    weekday=entry.weekday,
+                    start_period=entry.start_period,
+                    end_period=entry.end_period,
+                    periods=list(entry.periods),
+                    is_active=entry.is_active,
+                )
+        return snapshot
+
+    def fixed_schedule_source_takeover_view(self, request, snapshot_id):
+        self._ensure_fixed_schedule_access(request)
+        if request.method != "POST":
+            raise PermissionDenied("請以 POST 接管歷史匯入課表。")
+        source = get_object_or_404(
+            self.get_queryset(request).select_related("class_group", "term"),
+            pk=snapshot_id,
+            source_kind=NtubTimetableSnapshot.SourceKind.IMPORTED,
+        )
+        with transaction.atomic():
+            draft = self._create_fixed_schedule_draft(
+                request, source.class_group, source.term,
+                source_snapshot=source,
+            )
+        self.message_user(
+            request,
+            "已將所選歷史匯入版本複製到人工草稿；來源與學生目前課表均未被修改。",
+            messages.SUCCESS,
+        )
+        return HttpResponseRedirect(reverse(
+            "admin:courses_ntubtimetablesnapshot_fixed_schedule_detail",
+            args=[draft.class_group_id, draft.term_id],
+        ))
+
+    def fixed_schedule_takeover_view(self, request, class_group_id, term_id):
+        self._ensure_fixed_schedule_access(request)
+        if request.method != "POST":
+            raise PermissionDenied("請以 POST 建立固定課表修訂版。")
+        class_group = self._fixed_schedule_class_group(request.user, class_group_id)
+        term = self._fixed_schedule_term(term_id)
+        with transaction.atomic():
+            snapshot = self._create_fixed_schedule_draft(
+                request, class_group, term,
+            )
+        self.message_user(
+            request,
+            "已建立草稿版本；官方匯入資料仍保留，學生目前仍看到已發布版本。",
+            messages.SUCCESS,
+        )
+        return HttpResponseRedirect(reverse(
+            "admin:courses_ntubtimetablesnapshot_fixed_schedule_detail",
+            args=[class_group.pk, term.pk],
+        ))
+
+    def fixed_schedule_publish_view(self, request, class_group_id, term_id):
+        self._ensure_fixed_schedule_access(request)
+        if request.method != "POST":
+            raise PermissionDenied("請以 POST 發布固定課表。")
+        class_group = self._fixed_schedule_class_group(request.user, class_group_id)
+        term = self._fixed_schedule_term(term_id)
+        with transaction.atomic():
+            snapshot = get_object_or_404(
+                NtubTimetableSnapshot.objects.select_for_update(),
+                class_group=class_group, term=term,
+                source_kind=NtubTimetableSnapshot.SourceKind.MAINTAINED,
+                status=NtubTimetableSnapshot.Status.DRAFT,
+            )
+            error = self._fixed_schedule_publish_error(snapshot)
+            if error:
+                self.message_user(
+                    request, error,
+                    messages.ERROR,
+                )
+                return HttpResponseRedirect(reverse(
+                    "admin:courses_ntubtimetablesnapshot_fixed_schedule_detail",
+                    args=[class_group.pk, term.pk],
+                ))
+            self._publish_fixed_schedule(snapshot, request.user)
+        self.message_user(request, "班級固定課表已發布，學生將看到此版本。", messages.SUCCESS)
+        return HttpResponseRedirect(reverse(
+            "admin:courses_ntubtimetablesnapshot_fixed_schedule_detail",
+            args=[class_group.pk, term.pk],
+        ))
+
+    @staticmethod
+    def _fixed_schedule_publish_error(snapshot):
+        entries = list(snapshot.entries.filter(is_active=True).select_related(
+            "course", "teacher",
+        ))
+        courses = [entry for entry in entries if entry.entry_type == "course"]
+        if not courses:
+            return "空白課表或只有活動的課表不能發布；至少需要一筆有效課程安排。"
+        for entry in entries:
+            if (
+                not 1 <= entry.weekday <= 7
+                or not 1 <= entry.start_period <= entry.end_period <= 18
+            ):
+                return f"明細「{entry.course_name or entry.course_code}」的星期或節次無效。"
+            if entry.entry_type == "course":
+                if not entry.course_id or not entry.teacher_id:
+                    return (
+                        f"課程「{entry.course_name or entry.course_code}」尚未連結課程資料"
+                        "或指定授課教師。"
+                    )
+                if entry.course.term_id != snapshot.term_id:
+                    return f"課程「{entry.course_name or entry.course_code}」的學期不符。"
+            elif entry.entry_type == "activity" and not entry.course_name.strip():
+                return "活動明細缺少名稱，請先完成資料。"
+        return ""
+
+    @staticmethod
+    def _publish_fixed_schedule(snapshot, user):
+        NtubTimetableSnapshot.objects.filter(
+            class_group_id=snapshot.class_group_id,
+            term_id=snapshot.term_id,
+            source_kind=NtubTimetableSnapshot.SourceKind.MAINTAINED,
+            status=NtubTimetableSnapshot.Status.PUBLISHED,
+        ).exclude(pk=snapshot.pk).update(
+            status=NtubTimetableSnapshot.Status.ARCHIVED,
+        )
+        snapshot.status = NtubTimetableSnapshot.Status.PUBLISHED
+        snapshot.published_at = timezone.now()
+        snapshot.managed_by = user
+        snapshot.save(
+            update_fields=["status", "published_at", "managed_by", "updated_at"],
+        )
+
+    @staticmethod
+    def _withdraw_fixed_schedule(snapshot):
+        NtubTimetableSnapshotAdmin._archive_imported_fallback(snapshot)
+        snapshot.status = NtubTimetableSnapshot.Status.ARCHIVED
+        snapshot.save(update_fields=["status", "updated_at"])
+
+    def fixed_schedule_withdraw_view(self, request, snapshot_id):
+        self._ensure_fixed_schedule_access(request)
+        if request.method != "POST":
+            raise PermissionDenied("請以 POST 撤回固定課表。")
+        with transaction.atomic():
+            snapshot = get_object_or_404(
+                self.get_queryset(request).select_for_update(),
+                pk=snapshot_id,
+                source_kind=NtubTimetableSnapshot.SourceKind.MAINTAINED,
+                status=NtubTimetableSnapshot.Status.PUBLISHED,
+            )
+            self._withdraw_fixed_schedule(snapshot)
+        self.message_user(
+            request,
+            "已撤回發布。學生不會自動回退到官方匯入版本；再次顯示課表需發布新版本。",
+            messages.SUCCESS,
+        )
+        return HttpResponseRedirect(reverse(
+            "admin:courses_ntubtimetablesnapshot_fixed_schedule_detail",
+            args=[snapshot.class_group_id, snapshot.term_id],
+        ))
+
+    def _fixed_schedule_entry_form_response(
+        self, request, class_group, term, snapshot, form, entry=None,
+    ):
+        return TemplateResponse(
+            request, "admin/courses/fixed_schedule_entry_form.html", {
+                **self.admin_site.each_context(request),
+                "opts": self.model._meta,
+                "title": "編輯固定課表明細" if entry else "新增固定課程",
+                "class_group": class_group,
+                "term": term,
+                "snapshot": snapshot,
+                "entry": entry,
+                "form": form,
+            },
+            status=400 if request.method == "POST" and not form.is_valid() else 200,
+        )
+
+    def fixed_schedule_entry_edit_view(
+        self, request, class_group_id, term_id, entry_id=None,
+    ):
+        self._ensure_fixed_schedule_access(request)
+        class_group = self._fixed_schedule_class_group(request.user, class_group_id)
+        term = self._fixed_schedule_term(term_id)
+        snapshot = get_object_or_404(
+            NtubTimetableSnapshot.objects,
+            class_group=class_group, term=term,
+            source_kind=NtubTimetableSnapshot.SourceKind.MAINTAINED,
+            status=NtubTimetableSnapshot.Status.DRAFT,
+        )
+        entry = None
+        if entry_id is not None:
+            entry = get_object_or_404(
+                snapshot.entries.select_related("teacher", "course"),
+                pk=entry_id,
+            )
+        form = FixedScheduleEntryEditForm(
+            request.POST or None, instance=entry, snapshot=snapshot,
+        )
+        if request.method == "POST" and form.is_valid():
+            with transaction.atomic():
+                item = form.save(commit=False)
+                if item.entry_type == "course":
+                    existing_course = Course.objects.filter(
+                        term=term, code=item.course_code,
+                    ).first()
+                    if existing_course is None:
+                        item.course = Course.objects.create(
+                            term=term,
+                            owning_department=class_group.department,
+                            created_by=request.user,
+                            code=item.course_code,
+                            name=item.course_name,
+                            teacher=item.teacher,
+                            credits=item.credits if item.credits is not None else 3,
+                        )
+                    else:
+                        item.course = existing_course
+                else:
+                    item.course = None
+                item.save()
+            self.message_user(request, "固定課表明細已儲存於草稿。", messages.SUCCESS)
+            return HttpResponseRedirect(reverse(
+                "admin:courses_ntubtimetablesnapshot_fixed_schedule_detail",
+                args=[class_group.pk, term.pk],
+            ))
+        return self._fixed_schedule_entry_form_response(
+            request, class_group, term, snapshot, form, entry,
+        )
+
+    def fixed_schedule_entry_delete_view(
+        self, request, class_group_id, term_id, entry_id,
+    ):
+        self._ensure_fixed_schedule_access(request)
+        if request.method != "POST":
+            raise PermissionDenied("請以 POST 移除草稿明細。")
+        class_group = self._fixed_schedule_class_group(request.user, class_group_id)
+        term = self._fixed_schedule_term(term_id)
+        snapshot = get_object_or_404(
+            NtubTimetableSnapshot.objects,
+            class_group=class_group, term=term,
+            source_kind=NtubTimetableSnapshot.SourceKind.MAINTAINED,
+            status=NtubTimetableSnapshot.Status.DRAFT,
+        )
+        entry = get_object_or_404(snapshot.entries, pk=entry_id)
+        entry.delete()
+        self.message_user(request, "草稿明細已移除；歷史及已發布版本不受影響。", messages.SUCCESS)
+        return HttpResponseRedirect(reverse(
+            "admin:courses_ntubtimetablesnapshot_fixed_schedule_detail",
+            args=[class_group.pk, term.pk],
+        ))
 
     def sync_official(self, request):
         form = OfficialTimetableSyncForm(
@@ -327,7 +2523,7 @@ class NtubTimetableSnapshotAdmin(ScopedReadOnlyAdmin):
                 error = f"匯入失敗，未寫入資料：{exc}"
         context = {
             **self.admin_site.each_context(request),
-            "title": "同步官方課表與教學大綱",
+            "title": "歷史官方課表資料匯入／補抓",
             "form": form,
             "preview": preview,
             "syllabus_records": syllabus_records,
@@ -429,38 +2625,71 @@ class OfficialTimetableSyncForm(forms.Form):
 
 
 class NtubTimetableEntryForm(forms.ModelForm):
-    confirmed_credits = forms.IntegerField(
-        label="確認學分", required=False, min_value=0,
-        help_text="留空代表尚未核對；0 學分請明確填寫 0。")
-    credit_source_note = forms.CharField(
-        label="學分來源／備註", required=False, max_length=255)
-
     class Meta:
         model = NtubTimetableEntry
         fields = "__all__"
 
-    def __init__(self, *args, **kwargs):
+
+class FixedScheduleSelectionForm(forms.Form):
+    term = forms.ModelChoiceField(label="學年度／學期", queryset=Term.objects.none())
+    class_group = forms.ModelChoiceField(label="班級", queryset=AcademicClassGroup.objects.none())
+
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.instance.pk:
-            credit = OfficialCourseCredit.objects.filter(
-                term=self.instance.snapshot.term,
-                class_group=self.instance.snapshot.class_group,
-                course_code=self.instance.course_code).first()
-            if credit is not None:
-                self.initial["confirmed_credits"] = credit.credits
-                self.initial["credit_source_note"] = credit.source_note
+        self.fields["term"].queryset = Term.objects.all()
+        self.fields["class_group"].queryset = scoped_class_groups(
+            user,
+        ).select_related("department")
+
+
+class FixedScheduleEntryEditForm(forms.ModelForm):
+    class Meta:
+        model = NtubTimetableEntry
+        fields = (
+            "entry_type", "course_code", "course_name", "teacher",
+            "teacher_name", "credits", "weekly_hours", "course_category",
+            "weekday", "start_period", "end_period", "classroom", "is_active",
+        )
+
+    def __init__(self, *args, snapshot, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.snapshot = snapshot
+        self.fields["teacher"].queryset = Teacher.objects.order_by("name")
+        self.fields["teacher"].required = False
 
     def clean(self):
         cleaned = super().clean()
-        credits = cleaned.get("confirmed_credits")
-        if credits is not None:
-            entry_type = cleaned.get("entry_type", self.instance.entry_type)
-            course_code = cleaned.get("course_code", self.instance.course_code)
-            if entry_type != "course":
-                self.add_error("confirmed_credits", "官方活動不得建立課程學分核對資料。")
-            if not (course_code or "").strip():
-                self.add_error("confirmed_credits", "缺少課號，無法建立學分核對資料。")
+        weekday = cleaned.get("weekday")
+        start_period = cleaned.get("start_period")
+        end_period = cleaned.get("end_period")
+        if weekday is not None and not 1 <= weekday <= 7:
+            self.add_error("weekday", "星期必須介於 1 到 7。")
+        if start_period is not None and not 1 <= start_period <= 18:
+            self.add_error("start_period", "起始節次必須介於 1 到 18。")
+        if end_period is not None and not 1 <= end_period <= 18:
+            self.add_error("end_period", "結束節次必須介於 1 到 18。")
+        if (
+            start_period is not None and end_period is not None
+            and end_period < start_period
+        ):
+            self.add_error("end_period", "結束節次不可早於起始節次。")
+        if cleaned.get("entry_type") == "course":
+            for field in ("course_code", "course_name", "teacher"):
+                if not cleaned.get(field):
+                    self.add_error(field, "課程項目必須填寫課號、課名並指定授課教師。")
+        elif cleaned.get("entry_type") == "activity" and not cleaned.get("course_name"):
+            self.add_error("course_name", "活動項目必須填寫活動名稱。")
         return cleaned
+
+    def save(self, commit=True):
+        entry = super().save(commit=False)
+        entry.snapshot = self.snapshot
+        entry.periods = list(range(entry.start_period, entry.end_period + 1))
+        if entry.teacher_id:
+            entry.teacher_name = entry.teacher.name
+        if commit:
+            entry.save()
+        return entry
 
 
 @admin.register(NtubTimetableEntry)
@@ -468,7 +2697,7 @@ class NtubTimetableEntryAdmin(MaintainerScopedAdmin):
     form = NtubTimetableEntryForm
     list_display = ["snapshot", "entry_type", "weekday", "start_period", "end_period",
                     "course_code", "official_serial", "course_name", "teacher_name",
-                    "classroom", "confirmed_credits_display"]
+                    "classroom", "course_credit_display", "credit_basis_display"]
     list_filter = ["entry_type", "weekday", "snapshot__term"]
     search_fields = ["course_code", "course_name", "teacher_name", "classroom",
                      "snapshot__class_group__code"]
@@ -478,6 +2707,7 @@ class NtubTimetableEntryAdmin(MaintainerScopedAdmin):
         "entry_type", "course_code", "official_serial", "course_name",
         "teacher_name", "classroom", "weekday", "start_period", "end_period",
         "periods", "raw_text", "course_href",
+        "course_credit_display", "credit_basis_display",
     ]
 
     def get_queryset(self, request):
@@ -485,16 +2715,10 @@ class NtubTimetableEntryAdmin(MaintainerScopedAdmin):
         return queryset.filter(snapshot__class_group__in=scoped_class_groups(request.user))
 
     def has_add_permission(self, request):
-        return is_superuser(request.user) or request.user.has_perm(
-            "courses.add_officialcoursecredit")
+        return False
 
     def has_change_permission(self, request, obj=None):
-        if not (is_superuser(request.user) or request.user.has_perm(
-                "courses.change_officialcoursecredit")):
-            return False
-        if obj is None:
-            return True
-        return self.get_queryset(request).filter(pk=obj.pk).exists()
+        return False
 
     def has_delete_permission(self, request, obj=None):
         return False
@@ -503,14 +2727,13 @@ class NtubTimetableEntryAdmin(MaintainerScopedAdmin):
         # 新增時允許填入完整官方明細；既有匯入資料的原始欄位不可覆蓋。
         return self.readonly_fields if obj is not None else []
 
-    @admin.display(description="確認學分")
-    def confirmed_credits_display(self, obj):
-        if obj.entry_type != "course" or not obj.course_code:
-            return "—"
-        credit = OfficialCourseCredit.objects.filter(
-            term=obj.snapshot.term, class_group=obj.snapshot.class_group,
-            course_code=obj.course_code).first()
-        return "學分待確認" if credit is None else credit.credits
+    @admin.display(description="課程學分")
+    def course_credit_display(self, obj):
+        return effective_entry_credit(obj).value
+
+    @admin.display(description="學分依據")
+    def credit_basis_display(self, obj):
+        return effective_entry_credit(obj).basis
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "snapshot":
@@ -518,18 +2741,6 @@ class NtubTimetableEntryAdmin(MaintainerScopedAdmin):
                 class_group__in=scoped_class_groups(request.user))
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-    def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
-        credits = form.cleaned_data.get("confirmed_credits")
-        if credits is None or obj.entry_type != "course" or not obj.course_code:
-            return
-        OfficialCourseCredit.objects.update_or_create(
-            term=obj.snapshot.term,
-            class_group=obj.snapshot.class_group,
-            course_code=obj.course_code,
-            defaults={"credits": credits,
-                      "source_note": form.cleaned_data.get("credit_source_note", "")},
-        )
 
 
 @admin.register(OfficialCourseCredit)
@@ -577,13 +2788,15 @@ class OfficialTeachingSyllabusAdmin(MaintainerScopedAdmin):
         record = self.get_queryset(request).filter(pk=object_id).first()
         if record is None:
             raise PermissionDenied("你沒有重試此課綱的權限。")
+        if record.snapshot_id is None:
+            raise PermissionDenied("此課綱沒有對應的官方班級課表快照，不能重試。")
         record = sync_syllabus({
             "academic_year": record.academic_year,
             "semester": record.semester,
             "class_code": record.class_code,
             "official_serial": record.official_serial,
             "course_code": record.course_code,
-        })
+        }, snapshot=record.snapshot)
         self.message_user(
             request,
             f"{record.course_code}：{record.get_status_display()}",
@@ -608,7 +2821,7 @@ class OfficialTeachingSyllabusAdmin(MaintainerScopedAdmin):
 
 @admin.register(NtubOfferingSource)
 class NtubOfferingSourceAdmin(ScopedReadOnlyAdmin):
-    """官方開課來源：只能由匯入指令寫入，管理介面一律唯讀。"""
+    """歷史官方開課來源：匯入唯讀，僅 Superuser 可安全清理來源列。"""
 
     list_display = ["source_key", "course_code", "course_name", "class_group",
                     "official_serial", "teacher_name", "day_label", "time_range",
@@ -620,6 +2833,13 @@ class NtubOfferingSourceAdmin(ScopedReadOnlyAdmin):
     list_select_related = ["term", "class_group", "course", "section", "teacher"]
     date_hierarchy = "retrieved_at"
     change_list_template = "admin/courses/ntubofferingsource/change_list.html"
+    delete_confirmation_template = (
+        "admin/courses/ntubofferingsource/delete_confirmation.html"
+    )
+    delete_selected_confirmation_template = (
+        "admin/courses/ntubofferingsource/delete_selected_confirmation.html"
+    )
+    actions = ["delete_selected"]
 
     def get_urls(self):
         urls = super().get_urls()
@@ -632,6 +2852,8 @@ class NtubOfferingSourceAdmin(ScopedReadOnlyAdmin):
     def sync_syllabi(self, request):
         if request.method != "POST":
             raise PermissionDenied("請以 POST 執行官方課綱補抓。")
+        if not self.has_view_or_change_permission(request):
+            raise PermissionDenied("你沒有使用歷史匯入工具的權限。")
         records = sync_offering_syllabi(self.get_queryset(request))
         succeeded = sum(record.status == "success" for record in records)
         failed = len(records) - succeeded
@@ -643,6 +2865,105 @@ class NtubOfferingSourceAdmin(ScopedReadOnlyAdmin):
         )
         return HttpResponseRedirect(
             reverse("admin:courses_ntubofferingsource_changelist"))
+
+    def has_delete_permission(self, request, obj=None):
+        return is_superuser(request.user)
+
+    @staticmethod
+    def _deletion_impact(queryset):
+        source_ids = list(queryset.values_list("pk", flat=True))
+        course_ids = list(queryset.values_list("course_id", flat=True))
+        section_ids = list(queryset.values_list("section_id", flat=True))
+        protected_relations = []
+        for relation in NtubOfferingSource._meta.related_objects:
+            if getattr(relation.field.remote_field.on_delete, "__name__", "") != "PROTECT":
+                continue
+            related_count = relation.related_model._default_manager.filter(
+                **{f"{relation.field.name}__in": source_ids},
+            ).count()
+            if related_count:
+                protected_relations.append({
+                    "model": relation.related_model._meta.verbose_name_plural,
+                    "count": related_count,
+                    "reason": "此關聯使用 PROTECT，需先由管理員處理。",
+                })
+        return {
+            "source_count": len(source_ids),
+            "course_count": queryset.values("course_id").distinct().count(),
+            "teacher_count": queryset.values("teacher_id").distinct().count(),
+            "section_count": queryset.values("section_id").distinct().count(),
+            "enrollment_count": Enrollment.objects.filter(
+                section_id__in=section_ids,
+            ).count(),
+            "waitlist_count": Waitlist.objects.filter(
+                section_id__in=section_ids,
+            ).count(),
+            "fixed_entry_count": NtubTimetableEntry.objects.filter(
+                course_id__in=course_ids,
+            ).count(),
+            "published_syllabus_count": CourseTeachingSyllabus.objects.filter(
+                course_id__in=course_ids,
+                status=CourseTeachingSyllabus.Status.PUBLISHED,
+            ).count(),
+            "syllabus_submission_count": CourseSyllabusSubmission.objects.filter(
+                course_id__in=course_ids,
+            ).count(),
+            "recommendation_count": NtubCurriculumRecommendation.objects.filter(
+                offering_id__in=source_ids,
+            ).count(),
+            "candidate_count": NtubRecommendationCandidate.objects.filter(
+                offering_id__in=source_ids,
+            ).count(),
+            "ambiguity_count": NtubOfferingAmbiguity.objects.filter(
+                offering_id__in=source_ids,
+            ).count(),
+            "protected_relations": protected_relations,
+        }
+
+    @admin.action(
+        permissions=["delete"],
+        description="依確認頁面刪除選定的歷史官方來源",
+    )
+    def delete_selected(self, request, queryset):
+        if not is_superuser(request.user):
+            raise PermissionDenied("只有 Superuser 可以清理歷史官方開課來源。")
+        response = django_delete_selected(self, request, queryset)
+        if isinstance(response, TemplateResponse) and response.context_data:
+            response.context_data["source_deletion_impact"] = (
+                self._deletion_impact(queryset)
+            )
+        return response
+
+    def delete_view(self, request, object_id, extra_context=None):
+        source = self.get_object(request, object_id)
+        context = dict(extra_context or {})
+        if source is not None:
+            context["source_deletion_impact"] = self._deletion_impact(
+                self.get_queryset(request).filter(pk=source.pk),
+            )
+        return super().delete_view(request, object_id, extra_context=context)
+
+    def delete_model(self, request, obj):
+        if not self.has_delete_permission(request, obj):
+            raise PermissionDenied("只有 Superuser 可以清理歷史官方開課來源。")
+        with transaction.atomic():
+            super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        if not is_superuser(request.user):
+            raise PermissionDenied("只有 Superuser 可以清理歷史官方開課來源。")
+        source_ids = list(queryset.values_list("pk", flat=True))
+        with transaction.atomic():
+            sources = list(
+                self.get_queryset(request).select_for_update().filter(
+                    pk__in=source_ids,
+                )
+            )
+            if len(sources) != len(source_ids):
+                raise PermissionDenied("刪除清單包含無權管理的官方來源。")
+            super().delete_queryset(request, self.model.objects.filter(
+                pk__in=source_ids,
+            ))
 
     def scope_queryset(self, request, queryset):
         return queryset.filter(class_group__in=scoped_class_groups(request.user))

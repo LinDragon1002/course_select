@@ -1,0 +1,44 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">教師授課管理中心</a>
+  &rsaquo; {{ section.course.name }} {{ section.label }} 班選課學生
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main" class="teacher-dashboard teacher-roster">
+  <div class="teacher-dashboard__heading">
+    <div>
+      <p>{{ section.course.code }} · {{ section.course.term.code }} ·
+        {{ section.get_day_display }} 第 {{ section.start_period }}–{{ section.end_period }} 節 ·
+        {{ section.room|default:"未安排教室" }}</p>
+    </div>
+    <a class="button" href="{% url 'admin:courses_course_teacher_syllabi' %}?term={{ section.course.term_id }}">
+      返回授課管理中心
+    </a>
+  </div>
+
+  <div class="teacher-roster__table-wrap">
+    <table class="teacher-roster__table">
+      <thead>
+        <tr><th>學生</th><th>所屬班級</th><th>加選時間</th><th>狀態</th></tr>
+      </thead>
+      <tbody>
+        {% for student in roster %}
+          <tr>
+            <td>{{ student.name }}</td>
+            <td>{% if student.class_name %}{{ student.class_name }}（{{ student.class_code }}）{% else %}未提供{% endif %}</td>
+            <td>{{ student.created|date:"Y-m-d H:i" }}</td>
+            <td>{{ student.status }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="teacher-roster__empty">目前尚無已正式選課的學生。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p>此名單僅供查看，不提供加選、退選或修改選課資料。</p>
+</div>
+{% endblock %}

@@ -530,8 +530,40 @@ class OfficialFetchClient:
         return parser.fields
 
 
-def sync_syllabus(identifiers: dict[str, str], client: OfficialFetchClient | None = None):
+def _matching_snapshot(identifiers):
+    from .models import NtubTimetableSnapshot
+
+    snapshot = (NtubTimetableSnapshot.objects
+                .select_related("term", "class_group")
+                .filter(
+                    term__code=f"{identifiers['academic_year']}-{identifiers['semester']}",
+                    class_group__code=identifiers["class_code"],
+                    source_kind=NtubTimetableSnapshot.SourceKind.IMPORTED,
+                ).first())
+    if snapshot is None:
+        return None
+    return snapshot
+
+
+def _matching_course_entry(snapshot, identifiers):
+    return snapshot.entries.filter(
+        entry_type="course",
+        official_serial=identifiers["official_serial"],
+        course_code=identifiers["course_code"],
+    ).first()
+
+
+def sync_syllabus(identifiers: dict[str, str], client: OfficialFetchClient | None = None,
+                  snapshot=None):
     """單門課綱失敗只更新自身狀態，不影響其他快取。"""
+    from .models import OfficialTeachingSyllabus
+
+    if snapshot is None:
+        snapshot = _matching_snapshot(identifiers)
+    if snapshot is None or _matching_course_entry(snapshot, identifiers) is None:
+        raise OfficialFetchError(
+            "找不到與官方課綱五欄識別相符的班級課表快照與課程明細。")
+
     client = client or OfficialFetchClient()
     existing = OfficialTeachingSyllabus.objects.filter(
         academic_year=identifiers["academic_year"],
@@ -545,6 +577,7 @@ def sync_syllabus(identifiers: dict[str, str], client: OfficialFetchClient | Non
         "error_message": "",
         "source_url": SYLLABUS_URL,
         "fetched_at": timezone.now(),
+        "snapshot": snapshot,
     }
     try:
         values = client.fetch_syllabus(identifiers)
@@ -573,6 +606,7 @@ def sync_timetable_syllabi(class_group, term, client=None, limit=50,
     year, semester = str(term.code).split("-", 1)
     entries = (NtubTimetableEntry.objects.filter(
         snapshot__class_group=class_group, snapshot__term=term,
+        snapshot__source_kind="IMPORTED",
         entry_type="course").exclude(course_code="").order_by("id")[:limit])
     records = []
     seen = set()
@@ -601,7 +635,7 @@ def sync_timetable_syllabi(class_group, term, client=None, limit=50,
             "class_code": class_group.code,
             "official_serial": entry.official_serial,
             "course_code": entry.course_code,
-        }, client)
+        }, client, snapshot=entry.snapshot)
         record.sync_result = _syllabus_sync_result(
             record, OfficialCourseCredit.objects.filter(
                 term=term, class_group=class_group,
@@ -629,11 +663,15 @@ def sync_offering_syllabi(queryset=None, client: OfficialFetchClient | None = No
     sources = queryset if queryset is not None else NtubOfferingSource.objects.all()
     records = []
     for source in sources.iterator():
-        records.append(sync_syllabus({
+        identifiers = {
             "academic_year": source.academic_year,
             "semester": source.semester,
             "class_code": source.class_code,
             "official_serial": source.official_serial,
             "course_code": source.course_code,
-        }, client))
+        }
+        snapshot = _matching_snapshot(identifiers)
+        if snapshot is None or _matching_course_entry(snapshot, identifiers) is None:
+            continue
+        records.append(sync_syllabus(identifiers, client, snapshot=snapshot))
     return records

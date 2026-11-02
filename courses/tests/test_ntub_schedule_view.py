@@ -128,6 +128,31 @@ class OfficialTimetableContentTests(ScheduleTestCase):
         self.assertContains(r, "體育三(上)")
         self.assertEqual(r.context["official_courses_count"], 5)
 
+    def test_course_list_v21_uses_weekdays_and_source_toggle_markup(self):
+        self.profile_for(self.group_40630b)
+        response = self.client.get(reverse("course_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(
+            response, "本站為模擬選課系統，非 NTUB 正式校務選課紀錄。")
+        self.assertContains(response, 'data-schedule-filter="official"')
+        self.assertContains(response, 'data-schedule-filter="enrolled"')
+        self.assertContains(response, 'aria-pressed="true"')
+        self.assertNotContains(response, "週六")
+        self.assertNotContains(response, "週日")
+        self.assertNotContains(response, "作業系統")
+        self.assertNotContains(response, "官方班級課程")
+        self.assertNotContains(response, "展開更多進階限額")
+
+    def test_course_list_credit_total_uses_existing_summary(self):
+        self.profile_for(self.group_40630b)
+        response = self.client.get(reverse("course_list"))
+
+        self.assertContains(response, "學分上下限")
+        self.assertContains(response, "總學分－已選學分")
+        self.assertContains(
+            response, f"{response.context['credit_summary'].total} 學分")
+
     def test_official_course_links_to_scoped_detail_page(self):
         self.profile_for(self.group_40630b)
         entry = NtubTimetableEntry.objects.get(
@@ -138,6 +163,8 @@ class OfficialTimetableContentTests(ScheduleTestCase):
             official_serial=entry.official_serial, course_code=entry.course_code,
             course_name="生活藝術賞析", course_name_en="APPRECIATION OF LIFE ART",
             credits="2.0", weekly_hours="2.0", teacher_name="張婕",
+            teaching_target="<script>alert(1)</script>\n教學目標第二行",
+            teaching_matter="課程內容",
             weekly_progress={"week_01": "表演藝術的性別平權", "week_18": "期末考"},
             assessment="平時30%", references="表演的藝術", status="success")
         response = self.client.get(reverse("my_schedule"))
@@ -145,9 +172,25 @@ class OfficialTimetableContentTests(ScheduleTestCase):
         self.assertContains(response, f'href="{detail_url}"')
         detail = self.client.get(detail_url)
         self.assertEqual(detail.status_code, 200)
+        self.assertContains(detail, 'aria-label="麵包屑"')
+        self.assertContains(detail, 'href="/my/"')
+        self.assertContains(detail, "我的課表")
+        self.assertContains(detail, "生活藝術賞析")
+        self.assertNotContains(detail, "返回我的課表")
+        self.assertNotContains(detail, "每週教學進度")
         self.assertContains(detail, "張婕")
         self.assertContains(detail, "表演藝術的性別平權")
         self.assertContains(detail, "期末考")
+        self.assertContains(detail, "國立臺北商業大學 教學大綱")
+        self.assertContains(detail, "項目")
+        self.assertContains(detail, "內容")
+        self.assertEqual(len(detail.context["weekly_rows"]), 18)
+        self.assertEqual(detail.context["weekly_rows"][0]["label"], "第一週")
+        self.assertEqual(detail.context["weekly_rows"][-1]["label"], "第十八週")
+        self.assertContains(detail, 'class="official-syllabus-week-row"', count=18)
+        self.assertContains(detail, "&lt;script&gt;alert(1)&lt;/script&gt;")
+        self.assertNotContains(detail, "<script>alert(1)</script>")
+        self.assertNotContains(detail, "查看官方原始教學大綱")
 
     def test_official_activity_is_not_a_detail_page(self):
         self.profile_for(self.group_40630b)
@@ -253,12 +296,12 @@ class NoEnrollmentCreatedTests(ScheduleTestCase):
         self.assertEqual(Enrollment.objects.count(), 0)
         self.assertEqual(Section.objects.count(), 0)
 
-    def test_official_courses_do_not_count_towards_credits(self):
-        """官方課程與官方活動都不計入學分（學分只來自個人加選）。"""
+    def test_official_courses_use_automatic_credits_without_enrollment(self):
+        """官方課程依課綱或節次計學分，但不建立 Enrollment。"""
         self.profile_for(self.group_40630b)
         r = self.client.get(reverse("my_schedule"))
 
-        self.assertEqual(r.context["total"], 0)
+        self.assertEqual(r.context["total"], 10)
         self.assertEqual(r.context["mine"], [])
 
 
@@ -350,7 +393,7 @@ class MissingDataTests(ScheduleTestCase):
 
         self.assertEqual(r.status_code, 200)
         self.assertIsNone(r.context["snapshot"])
-        self.assertContains(r, "沒有這個班級的官方課表快照")
+        self.assertContains(r, "尚無已發布的班級固定課表")
 
     def test_empty_schedule_without_any_data(self):
         r = self.client.get(reverse("my_schedule"))

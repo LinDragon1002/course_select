@@ -42,6 +42,25 @@ class EnrollViewTests(CourseTestCase):
         for name, args in [("course_list", []), ("course_detail", [self.a.course_id]), ("my_schedule", [])]:
             self.assertEqual(self.client.get(reverse(name, args=args)).status_code, 200)
 
+    def test_detail_breadcrumb_preserves_known_list_filters_only(self):
+        response = self.client.get(
+            reverse("course_detail", args=[self.a.course_id]),
+            {"q": "A", "day": "2", "slot": "morning",
+             "next": "https://evil.example/"},
+        )
+        self.assertContains(response, "選課")
+        self.assertNotContains(response, "返回選課清單")
+        self.assertContains(response, 'href="/?q=A&amp;day=2&amp;slot=morning"')
+        self.assertNotContains(response, "evil.example")
+
+    def test_preview_markup_does_not_create_enrollment(self):
+        before = Enrollment.objects.filter(user=self.u).count()
+        response = self.client.get(reverse("course_detail", args=[self.a.course_id]))
+        self.assertContains(response, "預覽加入課表")
+        self.assertContains(response, 'data-start-period="1"')
+        self.assertContains(response, 'data-end-period="2"')
+        self.assertEqual(Enrollment.objects.filter(user=self.u).count(), before)
+
 
 class TeacherRoleTests(CourseTestCase):
     def setUp(self):

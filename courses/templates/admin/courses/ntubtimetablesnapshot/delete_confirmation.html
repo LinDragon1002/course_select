@@ -1,0 +1,14 @@
+{% extends "admin/delete_confirmation.html" %}
+
+{% block content %}
+{% if snapshot_entry_count != None %}
+  <div class="messagelist">
+    <p>刪除此版本會移除 {{ snapshot_entry_count }} 筆課表明細及 {{ snapshot_syllabus_count }} 份綁定的官方教學大綱來源。</p>
+    <p>以下關聯資料會保留，不會連帶刪除：{{ snapshot_course_count }} 門 Course、{{ snapshot_teacher_count }} 位 Teacher、{{ snapshot_section_count }} 個 Section、{{ snapshot_enrollment_count }} 筆 Enrollment、{{ snapshot_waitlist_count }} 筆 Waitlist；學生帳號也會保留。</p>
+    {% if snapshot_archives_imported %}
+      <p>此為已發布人工版本；確認刪除時，對應官方匯入版本也會封存，學生課表不會回退到舊資料。</p>
+    {% endif %}
+  </div>
+{% endif %}
+{{ block.super }}
+{% endblock %}

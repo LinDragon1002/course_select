@@ -1,90 +1,148 @@
 {% extends "courses/base.html" %}
+{% load static %}
 {% block title %}選課{% endblock %}
+{% block body_class %}course-list-page{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'courses/course-v21.css' %}">{% endblock %}
 {% block content %}
-<div class="page-head">
+<div class="course-v21-head">
   <div>
     <h1>選課</h1>
-    <p class="sub">{% if current_term %}{{ current_term.code }} · {% endif %}共 <span class="num">{{ sections|length }}</span> 個班別{% if full_count %}，<span class="num">{{ full_count }}</span> 班已額滿{% endif %}</p>
+    <p class="sub">本學期可查看 <span class="num">{{ sections|length }}</span> 個開課班別{% if full_count %}，<span class="num">{{ full_count }}</span> 班已額滿{% endif %}</p>
+  </div>
+  {% if window %}<p class="term-window tw-{{ window.state }}">{{ window.text }}</p>{% endif %}
+</div>
+<div class="course-v21-layout">
+  <div class="course-v21-left">
+    <section class="v21-panel v21-basic" aria-labelledby="basic-title">
+      <div class="v21-panel-heading"><h2 id="basic-title">選課基本資料</h2></div>
+      <dl class="v21-facts">
+        <dt>學分上下限</dt>
+        <dd>{% if credit_summary.limits %}{{ credit_summary.limits.minimum }} ～ {{ credit_summary.limits.maximum }}{% else %}尚未提供{% endif %}</dd>
+        <dt>總學分－已選學分</dt>
+        <dd>{{ credit_summary.total }} 學分</dd>
+      </dl>
+    </section>
+
+    <section class="v21-panel v21-mini-schedule" aria-labelledby="mini-schedule-title">
+      <div class="v21-panel-heading v21-schedule-heading">
+        <h2 id="mini-schedule-title">課表</h2>
+        <div class="v21-legend" aria-label="課表顯示篩選">
+          <button class="v21-key v21-key--official" type="button" aria-pressed="true" data-schedule-filter="official">配課</button>
+          <button class="v21-key v21-key--enrolled" type="button" aria-pressed="true" data-schedule-filter="enrolled">加選</button>
+        </div>
+      </div>
+      {% if schedule_grid.items %}
+      <div class="v21-week-wrap">
+        <div class="v21-week-grid" style="--periods: {{ schedule_grid.periods }}">
+          <div class="v21-week-head"><span>節次</span>{% for day_no, day_label in schedule_grid.days %}<span>{{ day_label|slice:"1:" }}</span>{% endfor %}</div>
+          <div class="v21-week-body">
+            <div class="v21-week-times">{% for period in schedule_grid.period_labels %}<span>{{ period }}</span>{% endfor %}</div>
+            {% for day_no, day_label, day_items in schedule_grid.day_columns %}
+            <div class="v21-week-column" style="grid-column: {{ day_no|add:"1" }};">
+              {% for item in day_items %}
+              <div class="v21-week-slot v21-week-slot--{{ item.kind }}{% if item.kind == 'official_course' or item.kind == 'official_enrollment' %} v21-week-slot--official-source{% endif %}{% if item.kind == 'enrollment' or item.kind == 'official_enrollment' %} v21-week-slot--enrolled-source{% endif %}" style="--top:{{ item.row_offset }};--span:{{ item.span }};--left:{{ item.left_pct }}%;--width:{{ item.width_pct }}%;" aria-label="{{ item.kind_label }}，{{ day_label }}第 {{ item.start_period }} 至 {{ item.end_period }} 節"></div>
+              {% endfor %}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% else %}<p class="v21-empty">目前沒有可顯示的課表資料。</p>{% endif %}
+    </section>
+  </div>
+
+  <div class="course-v21-right">
+    <section class="v21-panel v21-notices" aria-labelledby="notice-title">
+      <div class="v21-panel-heading"><h2 id="notice-title">選課說明事項</h2>{% if course_notices %}<button class="v21-more" type="button" aria-expanded="false" aria-controls="notice-list">更多 ▾</button>{% endif %}</div>
+      <div class="v21-notice-viewport" aria-live="polite">
+        {% if course_notices %}
+        <div id="notice-rotator" class="v21-notice-rotator">
+          {% for notice in course_notices %}<p class="v21-notice-item">{{ notice }}</p>{% endfor %}
+        </div>
+        <div id="notice-list" class="v21-notice-list" hidden>{% for notice in course_notices %}<p>{{ notice }}</p>{% endfor %}</div>
+        {% else %}
+        <p class="v21-empty">目前沒有選課公告</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="v21-panel v21-course-panel" aria-labelledby="course-list-title">
+      <div class="v21-panel-heading"><h2 id="course-list-title">本系／本班開課清單</h2><span class="v21-count">{{ sections|length }} 班</span></div>
+      <form class="filters v21-filters" method="get" role="search" id="course-filters">
+        <div class="search-control"><input type="search" name="q" value="{{ q }}" placeholder="搜尋課名／課號／老師" aria-label="搜尋課名、課號或老師"><button class="btn btn-primary" type="submit">搜尋</button></div>
+        <select name="day" aria-label="星期"><option value="">全部星期</option>{% for v, label in days %}<option value="{{ v }}"{% if day == v|stringformat:"s" %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+        <select name="slot" aria-label="時段"><option value="">全部時段</option>{% for v, label in slots %}<option value="{{ v }}"{% if slot == v %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+      </form>
+      <div class="v21-source-tabs" role="tablist" aria-label="開課範圍"><button class="is-active" type="button" role="tab" aria-selected="true">本班開課</button><button type="button" role="tab" aria-selected="false" disabled title="目前沒有獨立的本系開課資料來源">本系開課</button></div>
+      {% if show_empty_enroll_note %}<p class="policy-note">目前沒有可加選的課程：這個學期的開課都還沒有對你的班級開放。</p>{% endif %}
+      {% if q or day or slot %}<div class="filter-chips">{% if q %}<span class="filter-chip">關鍵字：{{ q }}</span>{% endif %}{% if day %}<span class="filter-chip">星期篩選</span>{% endif %}{% if slot %}<span class="filter-chip">時段篩選</span>{% endif %}<a class="clear-filters" href="{% url 'course_list' %}">清除全部</a></div>{% endif %}
+      <div class="v21-course-table-wrap">
+        <div class="v21-course-table-head"><span>科目／教師</span><span>開課班別與時間</span><span>學分</span><span>名額</span><span>操作</span></div>
+        <div class="course-loading" id="course-loading" aria-label="課程載入中" hidden>{% for _ in "1234" %}<div class="course-loading-row"><span class="skeleton skeleton-title"></span></div>{% endfor %}</div>
+        <ul class="courses v21-courses">
+          {% for s in sections %}{% include "courses/_section_row.html" with s=s next=request.get_full_path show_prereq_marks=show_prereq_marks %}{% empty %}
+          <li>{% url 'course_list' as clear_url %}{% if q or day or slot %}{% include "courses/_empty.html" with title="找不到符合的課程" text="請調整關鍵字、星期或時段篩選。" action_url=clear_url action_label="清除篩選" %}{% else %}{% include "courses/_empty.html" with title="目前沒有可選課程" text="這個學期還沒有對你的班級開放加選的班別。" %}{% endif %}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </section>
   </div>
 </div>
-{% if window %}<p class="term-window tw-{{ window.state }}">{{ window.text }}</p>{% endif %}
-<p class="site-disclaimer">本站為模擬選課系統，非 NTUB 正式校務選課紀錄。</p>
-
-<form class="filters" method="get" role="search" id="course-filters">
-  <div class="search-control">
-    <input type="search" name="q" value="{{ q }}" placeholder="課名、課號或老師" aria-label="搜尋課名、課號或老師">
-    <button class="btn btn-primary" type="submit" aria-label="搜尋">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-      <span>搜尋</span>
-    </button>
-  </div>
-  <select name="day" aria-label="星期">
-    <option value="">全部星期</option>
-    {% for v, label in days %}<option value="{{ v }}"{% if day == v|stringformat:"s" %} selected{% endif %}>{{ label }}</option>{% endfor %}
-  </select>
-  <select name="slot" aria-label="時段">
-    <option value="">全部時段</option>
-    {% for v, label in slots %}<option value="{{ v }}"{% if slot == v %} selected{% endif %}>{{ label }}</option>{% endfor %}
-  </select>
-</form>
-
-{% if q or day or slot %}
-<div class="filter-chips" aria-label="目前篩選條件">
-  {% if q %}<a class="filter-chip" href="?{% if day %}day={{ day|urlencode }}{% endif %}{% if day and slot %}&amp;{% endif %}{% if slot %}slot={{ slot|urlencode }}{% endif %}">關鍵字：{{ q }}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m18 6-12 12M6 6l12 12"/></svg></a>{% endif %}
-  {% if day %}<a class="filter-chip" href="?{% if q %}q={{ q|urlencode }}{% endif %}{% if q and slot %}&amp;{% endif %}{% if slot %}slot={{ slot|urlencode }}{% endif %}">{% for v, label in days %}{% if day == v|stringformat:"s" %}{{ label }}{% endif %}{% endfor %}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m18 6-12 12M6 6l12 12"/></svg></a>{% endif %}
-  {% if slot %}<a class="filter-chip" href="?{% if q %}q={{ q|urlencode }}{% endif %}{% if q and day %}&amp;{% endif %}{% if day %}day={{ day|urlencode }}{% endif %}">{% for v, label in slots %}{% if slot == v %}{{ label }}{% endif %}{% endfor %}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m18 6-12 12M6 6l12 12"/></svg></a>{% endif %}
-  <a class="clear-filters" href="{% url 'course_list' %}">清除全部</a>
-</div>
-{% endif %}
-
-<div class="list-head" id="course-list-head" aria-hidden="true">
-  <span>課程</span><span>班別與時間</span><span>學分</span><span class="right">名額</span><span></span>
-</div>
-{% if show_empty_enroll_note %}
-<p class="policy-note">
-  目前沒有可加選的課程：這個學期的開課都還沒有對你的班級開放（政策未發布、不開放自行加選，
-  或你尚未設定學籍）。
-</p>
-{% endif %}
-<div class="course-loading" id="course-loading" aria-label="課程載入中" hidden>
-  {% for _ in "1234" %}<div class="course-loading-row"><span class="skeleton skeleton-title"></span><span class="skeleton skeleton-text"></span><span class="skeleton skeleton-text"></span><span class="skeleton skeleton-text"></span></div>{% endfor %}
-</div>
-<ul class="courses">
-  {% for s in sections %}
-  {% include "courses/_section_row.html" with s=s next=request.get_full_path show_prereq_marks=show_prereq_marks %}
-  {% empty %}
-  <li>
-    {% url 'course_list' as clear_url %}
-    {% if q or day or slot %}
-      {% include "courses/_empty.html" with title="找不到符合的課程" text="試試其他關鍵字，或清除星期／時段篩選。" action_url=clear_url action_label="清除篩選" %}
-    {% else %}
-      {% include "courses/_empty.html" with title="目前沒有可選課程" text="這個學期還沒有對你的班級開放加選的班別。" %}
-    {% endif %}
-  </li>
-  {% endfor %}
-</ul>
 {% endblock %}
 {% block extra_js %}
 <script>
 (function () {
   var form = document.getElementById("course-filters");
   var loading = document.getElementById("course-loading");
-  var head = document.getElementById("course-list-head");
-  var list = document.querySelector(".courses");
-  function showLoading() {
-    if (!loading || !list) return;
-    loading.hidden = false;
-    list.hidden = true;
-    if (head) head.hidden = true;
-  }
+  var list = document.querySelector(".v21-courses");
+  function showLoading() { if (loading && list) { loading.hidden = false; list.hidden = true; } }
   if (form) form.addEventListener("submit", showLoading);
-  document.querySelectorAll(".filter-chip, .clear-filters").forEach(function (link) {
-    link.addEventListener("click", showLoading);
-  });
-  window.addEventListener("pageshow", function () {
-    if (loading) loading.hidden = true;
-    if (list) list.hidden = false;
-    if (head) head.hidden = false;
+  document.querySelectorAll(".filter-chip, .clear-filters").forEach(function (link) { link.addEventListener("click", showLoading); });
+  window.addEventListener("pageshow", function () { if (loading) loading.hidden = true; if (list) list.hidden = false; });
+
+  var rotator = document.getElementById("notice-rotator");
+  var noticeItems = rotator ? rotator.querySelectorAll(".v21-notice-item") : [];
+  var noticeIndex = 0;
+  var noticeTimer;
+  function showNotice(next) {
+    if (noticeItems.length < 2) return;
+    noticeItems[noticeIndex].classList.remove("is-visible");
+    noticeIndex = next % noticeItems.length;
+    noticeItems[noticeIndex].classList.add("is-visible");
+  }
+  function startNotices() {
+    if (noticeItems.length > 1 && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      noticeTimer = window.setInterval(function () { showNotice(noticeIndex + 1); }, 4200);
+    }
+  }
+  if (noticeItems.length) {
+    noticeItems[0].classList.add("is-visible");
+    startNotices();
+    var viewport = document.querySelector(".v21-notice-viewport");
+    if (viewport) { viewport.addEventListener("mouseenter", function () { window.clearInterval(noticeTimer); }); viewport.addEventListener("mouseleave", startNotices); }
+  }
+  var more = document.querySelector(".v21-more");
+  var allNotices = document.getElementById("notice-list");
+  if (more && allNotices) more.addEventListener("click", function () { var open = !allNotices.hidden; allNotices.hidden = open; more.setAttribute("aria-expanded", String(!open)); });
+
+  var scheduleFilters = { official: true, enrolled: true };
+  var scheduleButtons = document.querySelectorAll("[data-schedule-filter]");
+  var scheduleSlots = document.querySelectorAll(".v21-week-slot");
+  function updateScheduleSlots() {
+    scheduleSlots.forEach(function (slot) {
+      var isOfficial = slot.classList.contains("v21-week-slot--official-source");
+      var isEnrolled = slot.classList.contains("v21-week-slot--enrolled-source");
+      slot.classList.toggle("is-filtered", !(isOfficial && scheduleFilters.official) &&
+        !(isEnrolled && scheduleFilters.enrolled));
+    });
+  }
+  scheduleButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      var source = button.getAttribute("data-schedule-filter");
+      scheduleFilters[source] = !scheduleFilters[source];
+      button.setAttribute("aria-pressed", String(scheduleFilters[source]));
+      updateScheduleSlots();
+    });
   });
 })();
 </script>

@@ -117,6 +117,242 @@
   font-size: 0.8125rem;
 }
 
+.adminlte-admin .teacher-dashboard {
+  color: var(--body-fg);
+}
+
+.adminlte-admin .teacher-dashboard__heading,
+.adminlte-admin .teacher-dashboard__course-heading,
+.adminlte-admin .teacher-dashboard__section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.adminlte-admin .teacher-dashboard__heading {
+  margin-bottom: 1rem;
+}
+
+.adminlte-admin .teacher-dashboard__heading h1,
+.adminlte-admin .teacher-dashboard__course-heading h2,
+.adminlte-admin .teacher-dashboard__section-heading h3 {
+  margin: 0;
+  color: var(--body-loud-color);
+}
+
+.adminlte-admin .teacher-dashboard__heading p,
+.adminlte-admin .teacher-dashboard__course-heading p {
+  margin: 0.25rem 0 0;
+  color: var(--body-quiet-color);
+}
+
+.adminlte-admin .teacher-dashboard__term-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.adminlte-admin .teacher-dashboard__term-filter label {
+  font-weight: 600;
+}
+
+.adminlte-admin .teacher-dashboard__summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.adminlte-admin .teacher-dashboard__metric,
+.adminlte-admin .teacher-dashboard__course,
+.adminlte-admin .teacher-dashboard__section,
+.adminlte-admin .teacher-dashboard__empty-state {
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  background: var(--body-bg);
+}
+
+.adminlte-admin .teacher-dashboard__metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.9rem 1rem;
+}
+
+.adminlte-admin .teacher-dashboard__metric span,
+.adminlte-admin .teacher-dashboard__refresh-status,
+.adminlte-admin .teacher-dashboard__details dt {
+  color: var(--body-quiet-color);
+  font-size: 0.8125rem;
+}
+
+.adminlte-admin .teacher-dashboard__metric strong {
+  color: var(--body-loud-color);
+  font-size: 1.5rem;
+  line-height: 1.2;
+}
+
+.adminlte-admin .teacher-dashboard__refresh-status {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0.65rem 0 1.25rem;
+}
+
+.adminlte-admin .teacher-dashboard__courses {
+  display: grid;
+  gap: 1rem;
+}
+
+.adminlte-admin .teacher-dashboard__course {
+  padding: 1rem;
+}
+
+.adminlte-admin .teacher-dashboard__course-heading {
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.adminlte-admin .teacher-dashboard__syllabus {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.adminlte-admin .teacher-dashboard__section {
+  padding: 0.85rem;
+  margin-top: 0.65rem;
+  background: var(--darkened-bg);
+}
+
+.adminlte-admin .teacher-dashboard__section-heading {
+  align-items: center;
+}
+
+.adminlte-admin .teacher-dashboard__section-heading h3 {
+  font-size: 1rem;
+}
+
+.adminlte-admin .teacher-dashboard__details {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.adminlte-admin .teacher-dashboard__details div {
+  min-width: 0;
+}
+
+.adminlte-admin .teacher-dashboard__details dt {
+  margin-bottom: 0.15rem;
+}
+
+.adminlte-admin .teacher-dashboard__details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.adminlte-admin .teacher-dashboard__capacity {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.adminlte-admin .teacher-dashboard__progress {
+  flex: 1;
+  height: 0.55rem;
+  overflow: hidden;
+  border-radius: 1rem;
+  background: var(--border-color);
+}
+
+.adminlte-admin .teacher-dashboard__progress span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  transition: width 0.2s ease;
+}
+
+.adminlte-admin .teacher-dashboard__over-capacity {
+  color: var(--error-fg);
+  font-weight: 600;
+}
+
+.adminlte-admin .teacher-dashboard__empty,
+.adminlte-admin .teacher-dashboard__empty-state {
+  padding: 1rem;
+  color: var(--body-quiet-color);
+}
+
+.adminlte-admin .teacher-dashboard__empty-state {
+  text-align: center;
+}
+
+.adminlte-admin .teacher-dashboard__empty-state h2 {
+  color: var(--body-loud-color);
+  font-size: 1.15rem;
+}
+
+.adminlte-admin .teacher-roster__table-wrap {
+  overflow-x: auto;
+  margin-bottom: 0.75rem;
+}
+
+.adminlte-admin .teacher-roster__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.adminlte-admin .teacher-roster__table th,
+.adminlte-admin .teacher-roster__table td {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border-color);
+  text-align: left;
+}
+
+.adminlte-admin .teacher-roster__table th {
+  background: var(--darkened-bg);
+}
+
+.adminlte-admin .teacher-roster__empty {
+  text-align: center !important;
+  color: var(--body-quiet-color);
+}
+
+@media (max-width: 700px) {
+  .adminlte-admin .teacher-dashboard__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .adminlte-admin .teacher-dashboard__details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .adminlte-admin .teacher-dashboard__heading,
+  .adminlte-admin .teacher-dashboard__course-heading {
+    flex-direction: column;
+  }
+
+  .adminlte-admin .teacher-dashboard__refresh-status {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 420px) {
+  .adminlte-admin .teacher-dashboard__term-filter {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .adminlte-admin .teacher-dashboard__term-filter select {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+}
+
 /* ==========================================================================
    3. 標題與 object-tools
    ========================================================================== */
@@ -660,6 +896,14 @@
   text-transform: uppercase;
 }
 
+.adminlte-admin #content .inline-group fieldset.collapse {
+  display: block !important;
+}
+
+.adminlte-admin #content .inline-group fieldset.collapse > details > summary {
+  cursor: pointer;
+}
+
 /* ==========================================================================
    10. 訊息與錯誤提示
    ========================================================================== */
@@ -792,7 +1036,114 @@
 
   /* 表格可橫向捲動，不撐破版面 */
   .adminlte-admin #content #changelist-form .results,
+  .adminlte-admin #content .fixed-schedule-entry-results,
   .adminlte-admin #content .inline-related.tabular div.wrapper {
     overflow-x: auto;
   }
+}
+
+.adminlte-admin .fixed-schedule-grid-wrap {
+  overflow-x: auto;
+  margin: 1rem 0;
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+}
+
+.adminlte-admin .fixed-schedule-row-action {
+  display: inline;
+}
+
+.adminlte-admin .fixed-schedule-row-action button {
+  padding: 0;
+  border: 0;
+  color: var(--link-fg);
+  background: transparent;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.adminlte-admin .fixed-schedule-grid {
+  min-width: 760px;
+}
+
+.adminlte-admin .fixed-schedule-grid__head {
+  display: grid;
+  grid-template-columns: 3rem repeat(7, minmax(0, 1fr));
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.adminlte-admin .fixed-schedule-grid__corner,
+.adminlte-admin .fixed-schedule-grid__day {
+  padding: 0.5rem 0.25rem;
+  text-align: center;
+  font-weight: 600;
+  background: var(--darkened-bg);
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.adminlte-admin .fixed-schedule-grid__body {
+  display: grid;
+  grid-template-columns: 3rem repeat(7, minmax(0, 1fr));
+  grid-template-rows: repeat(var(--periods), 3.75rem);
+  min-height: calc(var(--periods) * 3.75rem);
+}
+
+.adminlte-admin .fixed-schedule-grid__times {
+  grid-column: 1;
+  display: grid;
+  grid-template-rows: repeat(var(--periods), 3.75rem);
+}
+
+.adminlte-admin .fixed-schedule-grid__times div {
+  display: grid;
+  place-items: center;
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  color: var(--body-quiet-color);
+}
+
+.adminlte-admin .fixed-schedule-grid__column {
+  display: grid;
+  grid-template-rows: repeat(var(--periods), 3.75rem);
+  position: relative;
+  border-right: 1px solid var(--border-color);
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(3.75rem - 1px),
+    var(--border-color) calc(3.75rem - 1px),
+    var(--border-color) 3.75rem
+  );
+}
+
+.adminlte-admin .fixed-schedule-grid__item {
+  position: absolute;
+  top: calc(var(--top) * 3.75rem + 0.12rem);
+  left: calc(var(--left) + 0.12rem);
+  width: calc(var(--width) - 0.24rem);
+  height: calc(var(--span) * 3.75rem - 0.24rem);
+  overflow: hidden;
+  padding: 0.25rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.3rem;
+  background: var(--selected-bg);
+  font-size: 0.68rem;
+  line-height: 1.25;
+}
+
+.adminlte-admin .fixed-schedule-grid__item--activity {
+  background: var(--darkened-bg);
+}
+
+.adminlte-admin .fixed-schedule-grid__item span,
+.adminlte-admin .fixed-schedule-grid__item strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.adminlte-admin .fixed-schedule-grid-wrap + .help {
+  margin-bottom: 1rem;
 }

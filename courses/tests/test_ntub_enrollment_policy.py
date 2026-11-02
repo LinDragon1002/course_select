@@ -30,6 +30,7 @@ from ..models import (AcademicCatalog, AcademicClassGroup, AcademicDepartment,
 from ..ntub_schedule_grid import KIND_OFFICIAL_ENROLLMENT
 from ..services import drop_enrollment, register
 from ..waitlist import cancel as cancel_wait
+from .session_helpers import force_admin_login
 
 
 class NtubPolicyTestCase(TestCase):
@@ -457,10 +458,15 @@ class StudentInterfaceTests(NtubPolicyTestCase):
         r = self.client.get(reverse("course_list"))
         self.assertContains(r, "本站模擬")
 
-    def test_disclaimer_is_shown(self):
-        for url in [reverse("course_list"), reverse("my_schedule")]:
-            r = self.client.get(url)
-            self.assertContains(r, "本站為模擬選課系統，非 NTUB 正式校務選課紀錄。")
+    def test_disclaimer_is_not_shown_on_course_list(self):
+        response = self.client.get(reverse("course_list"))
+        self.assertNotContains(
+            response, "本站為模擬選課系統，非 NTUB 正式校務選課紀錄。")
+
+    def test_disclaimer_is_not_shown_on_schedule_page(self):
+        response = self.client.get(reverse("my_schedule"))
+        self.assertNotContains(
+            response, "本站為模擬選課系統，非 NTUB 正式校務選課紀錄。")
 
 
 class MergedScheduleTests(NtubPolicyTestCase):
@@ -527,7 +533,7 @@ class RegressionTests(NtubPolicyTestCase):
 
     def test_admin_still_renders(self):
         admin = get_user_model().objects.create_superuser("root", "root@example.test", "pw")
-        self.client.force_login(admin)
+        force_admin_login(self.client, admin)
         r = self.client.get("/admin/")
         self.assertEqual(r.status_code, 200)
 

@@ -1,0 +1,58 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">首頁</a>
+  &rsaquo; <a href="{% url 'admin:courses_course_teacher_syllabi' %}">我的授課課程</a>
+  &rsaquo; {{ course }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>{{ course }}－教學大綱</h1>
+  <p>學期：{{ course.term }}；狀態：{{ status_label }}</p>
+  {% if error_message %}<p class="errornote">{{ error_message }}</p>{% endif %}
+  {% if return_reason %}
+    <div class="messagelist"><div class="warning">退回原因：{{ return_reason|linebreaksbr }}</div></div>
+  {% endif %}
+
+  {% if is_read_only %}
+    <p>此版本已提交，等待課程維護員審核；審核完成前不可修改。</p>
+    {% include "admin/courses/_syllabus_fields.html" with basic_fields=form_groups.basic_fields weekly_fields=form_groups.weekly_fields closing_fields=form_groups.closing_fields read_only=True %}
+  {% else %}
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="teacher_action" value="preview">
+      <fieldset class="module aligned">
+        <h2>匯入 DOCX（可選）</h2>
+        <p>僅接受安全檢查通過的 .docx；解析內容只會填入下方預覽，不會自動提交或發布。</p>
+        {{ upload_form.as_p }}
+        <button type="submit" class="button">解析並預覽</button>
+      </fieldset>
+    </form>
+
+    {% if unresolved_labels %}
+      <div class="messagelist"><div class="warning">
+        以下欄位未能辨識，請自行確認或補充，系統不會猜測：{{ unresolved_labels|join:"、" }}
+      </div></div>
+    {% endif %}
+
+    {% if form_groups %}
+      <form method="post">
+        {% csrf_token %}
+        {% if submission %}<input type="hidden" name="submission_id" value="{{ submission.pk }}">{% endif %}
+        <fieldset class="module aligned">
+          <h2>教學大綱內容</h2>
+          {% include "admin/courses/_syllabus_fields.html" with basic_fields=form_groups.basic_fields weekly_fields=form_groups.weekly_fields closing_fields=form_groups.closing_fields read_only=False %}
+        </fieldset>
+        <div class="submit-row">
+          <button type="submit" class="button" name="teacher_action" value="save_draft">儲存草稿</button>
+          <button type="submit" class="default" name="teacher_action" value="submit">提交給課程維護員</button>
+          <a class="button" href="{% url 'admin:courses_course_teacher_syllabi' %}">返回課程列表</a>
+        </div>
+      </form>
+    {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

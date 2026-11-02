@@ -4,29 +4,29 @@
 {% block content %}
 <header class="schedule-page-head">
   <div class="schedule-heading">
-    <h1>我的課表</h1>
+    <h1>我的課表{% if profile %}<span class="schedule-class-badge">{{ profile.class_group.name_zh }}（{{ profile.class_group.code }}）</span>{% endif %}</h1>
     <p class="schedule-term">{% if term %}{{ term.code }} 學期{% endif %}</p>
-  </div>
-  <div class="schedule-summary" aria-label="本學期修課摘要">
-    <div class="schedule-summary-credit"><span class="summary-label">本站已選學分</span><strong class="summary-value"><span class="num">{{ total }}</span>{% if max is not None %}<span class="summary-divider">/</span><span class="num">{{ max }}</span>{% endif %}</strong>{% if max is not None %}<span class="summary-credit-track" role="progressbar" aria-label="本站已選學分使用率" aria-valuemin="0" aria-valuemax="{{ max }}" aria-valuenow="{{ total }}"><span style="width:{% if total >= max %}100{% else %}{% widthratio total max 100 %}{% endif %}%"></span></span>{% endif %}</div>
-    <span class="summary-separator" aria-hidden="true">|</span>
-    <div class="schedule-summary-item"><span class="summary-label">已加選</span><strong class="summary-value"><span class="num">{{ mine|length }}</span> 門</strong></div>
-    {% if profile %}<span class="summary-separator" aria-hidden="true">|</span><div class="schedule-summary-item schedule-summary-class"><span class="summary-label">班級</span><strong class="summary-value">{{ profile.class_group.name_zh }}（{{ profile.class_group.code }}）</strong></div>{% endif %}
   </div>
 </header>
 
 <section class="schedule-credit-summary" aria-label="本學期學分摘要">
-  <p>官方班級課程已核對學分：<strong>{{ credit_summary.official_confirmed }}</strong> 學分</p>
-  <p>本站已加選學分：<strong>{{ credit_summary.enrolled }}</strong> 學分</p>
-  <p>本學期學分合計：
-    {% if credit_summary.complete %}<strong>{{ credit_summary.total }}</strong> 學分
-    {% else %}<strong>學分待確認</strong>（目前已知 {{ credit_summary.total }} 學分）{% endif %}
-  </p>
-  {% if min is not None %}
-  <p>本學制及年級最低／最高學分：{{ min }}／{{ max }} 學分</p>
-  <p>{% if below_minimum %}距離最低學分差額：{{ minimum_gap }} 學分{% else %}已達最低學分{% endif %}</p>
-  <p>尚可加選學分：{% if max is not None %}{{ available_credits }}{% else %}待確認{% endif %} 學分</p>
-  {% endif %}
+  <div class="schedule-credit-card">
+    <span class="summary-label">本學期已選學分</span>
+    <strong class="summary-value">{% if credit_summary.complete %}{{ total|floatformat:"-2" }}{% else %}待確認{% endif %}{% if max is not None %} / {{ max|floatformat:"-2" }}{% endif %} 學分</strong>
+    <span class="schedule-credit-detail">官方配課 {{ credit_summary.official_confirmed|floatformat:"-2" }} + 自行加選 {{ credit_summary.enrolled|floatformat:"-2" }}</span>
+  </div>
+  <div class="schedule-credit-card">
+    <span class="summary-label">學分上下限</span>
+    <strong class="summary-value">{% if min is not None %}{{ min }}～{{ max }}{% else %}待確認{% endif %}</strong>
+    <span class="schedule-credit-detail">{% if min is not None %}最低 {{ min }}、最高 {{ max }} 學分{% else %}學分規則待確認{% endif %}</span>
+  </div>
+  <div class="schedule-credit-card">
+    <span class="summary-label">尚可加選學分</span>
+    <strong class="summary-value">{% if available_credits is not None %}{{ available_credits|floatformat:"-2" }} 學分{% else %}待確認{% endif %}</strong>
+    <span class="schedule-credit-detail">{% if minimum_gap %}距離最低要求尚差 {{ minimum_gap|floatformat:"-2" }} 學分{% elif min is not None %}已達最低學分{% else %}學分規則待確認{% endif %}</span>
+  </div>
+  {% if max is not None %}<span class="summary-credit-track" role="progressbar" aria-label="本學期已選學分使用率" aria-valuemin="0" aria-valuemax="{{ max }}" aria-valuenow="{{ total }}"><span style="width:{% if total >= max %}100{% else %}{% widthratio total max 100 %}{% endif %}%"></span></span>{% endif %}
+  <span class="schedule-credit-count">自行加選 {{ mine|length }} 門</span>
   {% if not credit_summary.complete %}
   <p class="schedule-source schedule-source--empty">學分尚未完整核對：{{ credit_summary.pending_course_codes|join:"、" }}。</p>
   {% endif %}
@@ -35,21 +35,21 @@
 {% if snapshot %}
 <div class="schedule-legend-row">
   <div class="wk-legend" aria-label="課程類型圖例">
-    <span class="wk-key wk-key--official">班級官方課程</span>
-    <span class="wk-key wk-key--activity">官方活動</span>
+    <span class="wk-key wk-key--official">班級固定課程</span>
+    <span class="wk-key wk-key--activity">班級活動</span>
     <span class="wk-key wk-key--enrolled">個人加選</span>
-    <span class="wk-key wk-key--merged">官方課程＋本站加選</span>
+    <span class="wk-key wk-key--merged">固定課程＋自主加選</span>
   </div>
-  <span class="schedule-official-note">班級官方課表 · {{ snapshot.term.code }} · {{ official_courses_count }} 門課程</span>
-  <details class="schedule-info-tip"><summary aria-label="官方課程學分說明"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg></summary><span>官方課程不一定都是必修；官方活動只是時間框架，兩者都不計入本站學分。</span></details>
+  <span class="schedule-official-note">班級固定課表 · {{ snapshot.term.code }} · {{ official_courses_count }} 門課程{% if snapshot.source_kind == "IMPORTED" %}（歷史匯入資料）{% else %}（系所維護發布）{% endif %}</span>
+  <details class="schedule-info-tip"><summary aria-label="固定課程學分說明"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg></summary><span>班級固定課程不會建立 Enrollment，也不改變自主選課與候補名額；官方活動只作為時間框架。</span></details>
 </div>
 {% elif profile %}
 <p class="schedule-source schedule-source--empty">
-  目前學期（{{ term.code|default:"未設定" }}）沒有這個班級的官方課表快照，下方只顯示你自己加選的課程。
+  目前學期（{{ term.code|default:"未設定" }}）尚無已發布的班級固定課表，下方只顯示你自己加選的課程。
 </p>
 {% else %}
 <p class="schedule-source schedule-source--empty">
-  尚未設定學籍，因此沒有班級官方課表；下方只顯示你自己加選的課程。
+  尚未設定學籍，因此沒有班級固定課表；下方只顯示你自己加選的課程。
 </p>
 {% endif %}
 
@@ -104,13 +104,13 @@
 <p class="scroll-hint">左右滑動看完整一週。</p>
 {% else %}
 {% url 'course_list' as enroll_url %}
-{% include "courses/_empty.html" with title="目前課表是空的" text="班級官方課程與你加選的課程都會出現在這裡。" action_url=enroll_url action_label="前往選課" %}
+{% include "courses/_empty.html" with title="目前課表是空的" text="班級固定課程與你加選的課程都會出現在這裡。" action_url=enroll_url action_label="前往選課" %}
 {% endif %}
 
 {% if snapshot %}
 <section class="mine">
   <div class="mine-head">
-    <h2>班級官方課程</h2>
+    <h2>班級固定課程</h2>
     <span class="num">{{ official_courses_count }} 門</span>
   </div>
   <ul class="courses">
@@ -120,10 +120,10 @@
       <span>{{ row.teacher|default:"教師未定" }}</span>
       <span>{{ row.classroom|default:"教室未定" }}</span>
       <span>{{ row.weekday_label }} 第{{ row.start_period }}-{{ row.end_period }}節</span>
-      <span>官方課程 · {% if row.credits is not None %}{{ row.credits }} 學分{% else %}學分待確認{% endif %}</span>
+      <span>固定課程 · {% if row.credits is not None %}{{ row.credits }} 學分{% else %}學分待確認{% endif %}</span>
     </li>
     {% empty %}
-    <li class="empty">這個班級在 {{ snapshot.term.code }} 學期沒有官方課程資料。</li>
+    <li class="empty">這個班級在 {{ snapshot.term.code }} 學期沒有固定課程資料。</li>
     {% endfor %}
   </ul>
 </section>
@@ -142,11 +142,10 @@
       <div class="action">{% include "courses/_action.html" with section=s action=s.action next=request.path %}</div>
     </li>
     {% empty %}
-    <li>{% url 'course_list' as enroll_url %}{% include "courses/_empty.html" with title="還沒有加選課程" text="官方課程會顯示在上方週課表；自行加選的課會列在這裡。" action_url=enroll_url action_label="前往選課" %}</li>
+    <li>{% url 'course_list' as enroll_url %}{% include "courses/_empty.html" with title="還沒有加選課程" text="班級固定課程會顯示在上方週課表；自主加選的課會列在這裡。" action_url=enroll_url action_label="前往選課" %}
     {% endfor %}
   </ul>
 </section>
-<footer class="schedule-footer">本站為模擬選課系統，非 NTUB 正式校務選課紀錄。</footer>
 <button class="back-to-top" id="back-to-top" type="button" aria-label="回到最上方" title="回到最上方" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg></button>
 {% endblock %}
 

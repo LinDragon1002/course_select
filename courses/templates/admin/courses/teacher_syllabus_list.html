@@ -1,0 +1,40 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">首頁</a>
+  &rsaquo; 我的授課課程／教學大綱
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>我的授課課程／教學大綱</h1>
+  {% if courses %}
+    <div class="module">
+      <table>
+        <thead>
+          <tr><th>學期</th><th>課號</th><th>課程</th><th>課綱狀態</th><th>操作</th></tr>
+        </thead>
+        <tbody>
+          {% for course in courses %}
+            <tr>
+              <td>{{ course.term }}</td>
+              <td>{{ course.code }}</td>
+              <td>{{ course.name }}</td>
+              <td>{{ course.syllabus_status }}</td>
+              <td>
+                <a href="{% url 'admin:courses_course_teacher_syllabus' course.pk %}">
+                  檢視／編輯教學大綱
+                </a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>目前沒有指派給此教師帳號的課程。</p>
+  {% endif %}
+</div>
+{% endblock %}

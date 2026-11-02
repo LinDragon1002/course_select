@@ -202,14 +202,14 @@
 .detail-syllabus p { max-width: 72ch; font-size: 14px; line-height: 1.75; overflow-wrap: anywhere; }
 .teacher-name { font-size: 15px; font-weight: 600; }
 .teacher-email { display: inline-block; margin-top: 5px; color: var(--primary-700); font-size: 13px; }
-.preview-dialog { width: min(760px, calc(100vw - 32px)); max-height: min(90vh, 760px); overflow-y: auto; }
-.preview-dialog .modal-inner { padding: 22px; }
+.preview-dialog { width: min(820px, calc(100vw - 32px)); max-width: calc(100vw - 32px); max-height: min(90dvh, 820px); overflow: hidden; }
+.preview-dialog .modal-inner { display: flex; flex-direction: column; max-height: min(90dvh, 820px); padding: 22px; }
 .preview-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .preview-heading .modal-title { margin-top: 4px; }
 .preview-close { display: inline-flex; flex: none; }
 .preview-course-name { margin-top: 14px; color: var(--text-muted); font-size: 13px; }
-.preview-grid-wrap { margin-top: 14px; overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-control); }
-.preview-grid { display: grid; grid-template-columns: 48px repeat(5, minmax(72px, 1fr)); grid-template-rows: 36px repeat(13, 28px); grid-auto-rows: 28px; min-width: 500px; position: relative; background: var(--surface); }
+.preview-grid-wrap { flex: 1 1 auto; min-height: 0; margin-top: 14px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-control); }
+.preview-grid { display: grid; grid-template-columns: 64px repeat(5, minmax(72px, 1fr)); grid-template-rows: 36px repeat(13, 30px); min-width: 500px; position: relative; background: var(--surface); }
 .preview-corner,
 .preview-day,
 .preview-period,
@@ -217,12 +217,35 @@
 .preview-corner,
 .preview-day { position: sticky; top: 0; z-index: 1; background: var(--raised); color: var(--text-muted); font-size: 12px; font-weight: 600; }
 .preview-period { color: var(--text-muted); font-size: 11px; }
-.preview-block { z-index: 2; display: flex; align-items: flex-start; padding: 5px; border-left: 3px solid var(--primary-600); border-radius: 4px; background: var(--slot-enrolled-bg); color: var(--slot-enrolled-text); font-size: 11px; line-height: 1.35; overflow: hidden; }
-.preview-block--conflict { border-left-color: var(--danger); background: repeating-linear-gradient(135deg, var(--danger-bg) 0 7px, var(--surface) 7px 14px); color: var(--danger-text); }
+.preview-block { z-index: 2; display: flex; align-items: flex-start; padding: 5px; border-radius: 4px; background: var(--slot-enrolled-bg); color: var(--slot-enrolled-text); font-size: 11px; line-height: 1.35; overflow: hidden; }
+.preview-block--conflict { background: repeating-linear-gradient(135deg, var(--danger-bg) 0 7px, var(--surface) 7px 14px); color: var(--danger-text); }
 .preview-result { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--success-border); border-radius: var(--radius-control); background: var(--success-bg); color: var(--success-text); font-size: 13px; }
 .preview-result.is-conflict { border-color: var(--danger-border); background: var(--danger-bg); color: var(--danger-text); }
 .preview-dialog .modal-actions { align-items: center; }
 
+.detail-breadcrumb { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; color: var(--text-muted); font-size: 12px; }
+.detail-breadcrumb a { color: var(--text-muted); }
+.official-syllabus-document { display: grid; gap: 20px; min-width: 0; padding: 0; background: #fff; }
+.official-syllabus-title { margin: 0; color: var(--text); font-size: 22px; font-weight: 700; text-align: center; }
+.official-syllabus-table-wrap { width: 100%; min-width: 0; overflow-x: auto; }
+.official-syllabus-table { width: 100%; border: 1px solid #cfd3d8; border-collapse: collapse; background: #fff; color: var(--text); font-size: 14px; line-height: 1.65; }
+.official-syllabus-table th,
+.official-syllabus-table td { padding: 9px 12px; border: 1px solid #cfd3d8; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.official-syllabus-table thead th { background: #eef0f2; font-weight: 600; }
+.official-syllabus-basic { table-layout: fixed; min-width: 580px; }
+.official-syllabus-basic th { width: 16%; background: #f1f2f3; font-weight: 600; }
+.official-syllabus-basic td { width: 34%; }
+.official-syllabus-english { display: block; margin-top: 2px; color: var(--text-muted); font-size: 12px; }
+.official-syllabus-content { table-layout: fixed; }
+.official-syllabus-content col:first-child { width: 22%; }
+.official-syllabus-content col:last-child { width: 78%; }
+.official-syllabus-content th { background: #f1f2f3; font-weight: 600; }
+.official-syllabus-content td { white-space: normal; }
+.course-teaching-syllabus { gap: 14px; }
+.course-teaching-syllabus .official-syllabus-title { font-size: 19px; }
+.course-teaching-syllabus .official-syllabus-basic { min-width: 0; }
+.course-teaching-syllabus .official-syllabus-table { overflow-wrap: anywhere; }
+.legacy-course-syllabus { font-size: 15px; line-height: 1.75; overflow-wrap: anywhere; }
 .related { margin-top: 56px; }
 .related h2 { margin-bottom: 4px; }
 
@@ -548,7 +571,22 @@
 }
 
 @media (max-width: 700px) {
+  .official-syllabus-document { gap: 14px; }
+  .official-syllabus-table { font-size: 13px; }
+  .official-syllabus-title { font-size: 18px; }
+  .official-syllabus-table th,
+  .official-syllabus-table td { padding: 8px; }
+  .official-syllabus-basic { min-width: 0; }
+  .official-syllabus-basic th { width: 18%; }
+  .official-syllabus-basic td { width: 32%; }
+  .preview-dialog { width: calc(100vw - 20px); max-width: calc(100vw - 20px); }
+  .preview-dialog .modal-inner { padding: 14px; }
+  .preview-grid { grid-template-columns: 48px repeat(5, minmax(56px, 1fr)); min-width: 0; }
   .scroll-hint { display: block; }
+}
+@media (max-width: 600px) {
+  .official-syllabus-content col:first-child { width: 32%; }
+  .official-syllabus-content col:last-child { width: 68%; }
 }
 
 .roster-wrap { overflow-x: auto; }
@@ -748,6 +786,7 @@ body.schedule-page { background: #fff; }
 .schedule-page .app-header { background: #fff; backdrop-filter: none; }
 .schedule-page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
 .schedule-heading h1 { font-size: 26px; line-height: 1.25; }
+.schedule-class-badge { display: inline-block; margin-left: 10px; color: var(--text-muted); font-size: 13px; font-weight: 500; vertical-align: middle; }
 .schedule-term { margin-top: 4px; color: var(--text-muted); font-size: 14px; }
 .schedule-summary { display: flex; align-items: center; justify-content: flex-end; gap: 16px; min-width: 0; margin-top: 0; }
 .schedule-summary-item,
@@ -763,6 +802,13 @@ body.schedule-page { background: #fff; }
 .schedule-summary-item { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
 .schedule-summary-class .summary-value { overflow-wrap: anywhere; }
 .summary-separator { color: var(--border-strong); font-size: 14px; }
+.schedule-credit-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0 0 16px; }
+.schedule-credit-card { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 12px 14px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--surface); }
+.schedule-credit-card .summary-value { font-size: 20px; }
+.schedule-credit-detail { color: var(--text-muted); font-size: 12px; }
+.schedule-credit-summary > .summary-credit-track { grid-column: 1 / -1; width: 100%; height: 5px; margin: -4px 0 0; }
+.schedule-credit-count { grid-column: 1 / -1; color: var(--text-muted); font-size: 12px; text-align: right; }
+.schedule-credit-summary > .schedule-source { grid-column: 1 / -1; }
 .schedule-source { margin: 4px 0 12px; color: var(--text-muted); font-size: 13px; }
 .schedule-source--empty { padding: 0; border: 0; background: transparent; }
 .schedule-legend-row { position: relative; z-index: 40; display: flex; align-items: center; gap: 8px; min-height: 32px; margin-bottom: 8px; }
@@ -788,7 +834,7 @@ body.schedule-page { background: #fff; }
 .wk-corner { padding: 8px 4px; color: var(--text-muted); font-size: 12px; text-align: center; }
 .wk-dayhead { position: relative; padding: 8px 4px 9px; border-bottom: 1px solid var(--border-subtle); color: var(--text-muted); font-size: 12px; font-weight: 500; text-align: center; }
 .wk-dayhead.is-today { color: var(--primary-800); font-weight: 700; }
-.wk-dayhead.is-today::after { position: absolute; right: 14%; bottom: -1px; left: 14%; height: 2px; content: ""; background: var(--primary-600); }
+.wk-dayhead.is-today::after { display: none; }
 .wk-body { display: grid; grid-template-columns: var(--week-columns); grid-template-rows: repeat(var(--periods), var(--wk-row-h)); }
 .wk-times { grid-column: 1; grid-row: 1 / -1; display: grid; grid-template-rows: repeat(var(--periods), var(--wk-row-h)); position: sticky; left: 0; z-index: 2; background: #fff; }
 .wk-time { display: flex; flex-direction: column; align-items: center; padding-top: 5px; color: var(--text); font-size: 14px; font-variant-numeric: tabular-nums; }
@@ -798,7 +844,7 @@ body.schedule-page { background: #fff; }
 .wk-col--empty-weekend { opacity: 1; }
 .wk-dayhead[data-day="6"], .wk-dayhead[data-day="7"] { color: var(--text-faint); }
 .wk-dayhead.is-today[data-day="6"], .wk-dayhead.is-today[data-day="7"] { color: var(--primary-800); }
-.wk-slot { position: absolute; top: calc(var(--top) * var(--wk-row-h) + var(--wk-gutter)); height: calc(var(--span) * var(--wk-row-h) - 2px); left: calc(var(--left) + var(--wk-gutter)); width: calc(var(--width) - 2 * var(--wk-gutter)); padding: 6px 8px; overflow: hidden; border: 0; border-left: 3px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 12px; line-height: 1.35; transition: box-shadow 150ms ease, transform 150ms ease; }
+.wk-slot { position: absolute; top: calc(var(--top) * var(--wk-row-h) + var(--wk-gutter)); height: calc(var(--span) * var(--wk-row-h) - 2px); left: calc(var(--left) + var(--wk-gutter)); width: calc(var(--width) - 2 * var(--wk-gutter)); padding: 6px 8px; overflow: hidden; border: 0; border-radius: 6px; background: var(--surface); color: var(--text); font-size: 12px; line-height: 1.35; transition: box-shadow 150ms ease, transform 150ms ease; }
 .wk-slot:hover { z-index: 4; transform: translateY(-2px); box-shadow: var(--shadow-2); }
 .wk-slot:focus-within { z-index: 5; outline: var(--focus-ring); outline-offset: 1px; }
 .wk-slot-link { display: block; height: 100%; color: inherit; text-decoration: none; background-image: none !important; }
@@ -808,7 +854,7 @@ body.schedule-page { background: #fff; }
 .wk-slot--official_activity { border-left-color: var(--slot-activity-bar); background: var(--slot-activity-bg); color: var(--slot-activity-text); }
 .wk-slot--enrollment { border-left-color: var(--slot-enrolled-bar); background: var(--slot-enrolled-bg); color: var(--slot-enrolled-text); }
 .wk-slot--official_enrollment { border-left-color: var(--slot-merged-bar); background: var(--slot-merged-bg); color: var(--slot-merged-text); }
-.wk-slot--conflict { border: 0; border-left: 3px solid var(--danger); box-shadow: inset 0 0 0 1px var(--danger); }
+.wk-slot--conflict { border: 0; box-shadow: inset 0 0 0 2px var(--danger); }
 .wk-slot-warn { position: absolute; right: 5px; bottom: 4px; padding: 1px 5px; border-radius: var(--radius-chip); background: var(--danger); color: #fff; font-size: 10px; }
 .scroll-hint { display: none; margin-top: 6px; color: var(--text-muted); font-size: 12px; }
 .schedule-conflict { margin: 8px 0; padding: 8px 0; border: 0; border-radius: 0; border-bottom: 1px solid var(--danger-border); background: #fff; color: var(--danger-text); font-size: 13px; }
@@ -832,6 +878,12 @@ body.schedule-page { background: #fff; }
 @media (max-width: 767px) {
   .schedule-page .canvas { padding: 18px 16px 28px; }
   .schedule-page-head { display: block; margin-bottom: 16px; }
+  .schedule-credit-summary { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .schedule-credit-summary > .summary-credit-track,
+  .schedule-credit-summary > .schedule-credit-count,
+  .schedule-credit-summary > .schedule-source { grid-column: 1; }
+  .schedule-credit-count { text-align: left; }
+  .schedule-class-badge { display: block; margin: 6px 0 0; }
   .schedule-summary { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 8px 10px; margin-top: 12px; }
   .schedule-summary-credit { min-width: 150px; }
   .schedule-summary-class { flex-basis: 100%; }

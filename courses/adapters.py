@@ -8,12 +8,16 @@
 from allauth.core.exceptions import ImmediateHttpResponse
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.shortcuts import redirect
+
+from .teacher_access import SYLLABUS_TEACHER_GROUP_NAME
 
 NTUB_EMAIL_DOMAIN = "ntub.edu.tw"
 
 REJECT_DOMAIN_MESSAGE = "此系統只接受 @ntub.edu.tw 的 NTUB 學生帳號登入。"
 REJECT_UNVERIFIED_MESSAGE = "Google 尚未驗證這個信箱，請先在 Google 完成信箱驗證再登入。"
+REJECT_TEACHER_ACCOUNT_MESSAGE = "教師後台帳號請使用獨立的後台帳號及密碼登入。"
 
 
 def is_ntub_email(email):
@@ -53,6 +57,18 @@ class NtubSocialAccountAdapter(DefaultSocialAccountAdapter):
             self._reject(request, REJECT_DOMAIN_MESSAGE)
         if not google_email_verified(sociallogin):
             self._reject(request, REJECT_UNVERIFIED_MESSAGE)
+        social_user = getattr(sociallogin, "user", None)
+        if (
+            social_user is not None
+            and social_user.pk
+            and social_user.groups.filter(name=SYLLABUS_TEACHER_GROUP_NAME).exists()
+        ):
+            self._reject(request, REJECT_TEACHER_ACCOUNT_MESSAGE)
+        if get_user_model().objects.filter(
+            email__iexact=social_email(sociallogin),
+            groups__name=SYLLABUS_TEACHER_GROUP_NAME,
+        ).exists():
+            self._reject(request, REJECT_TEACHER_ACCOUNT_MESSAGE)
 
     def _reject(self, request, message):
         messages.error(request, message)

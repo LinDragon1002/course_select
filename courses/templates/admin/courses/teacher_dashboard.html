@@ -1,0 +1,247 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">教師授課管理中心</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main" class="teacher-dashboard"
+     data-stats-url="{{ stats_url }}"
+     data-term="{% if selected_term %}{{ selected_term.pk }}{% endif %}">
+  <div class="teacher-dashboard__heading">
+    <div>
+      <p>查看授課班別、即時選課狀況與教學大綱進度。</p>
+    </div>
+    <button type="button" class="button" id="teacher-refresh">立即更新</button>
+  </div>
+
+  <form method="get" class="teacher-dashboard__term-filter">
+    <label for="teacher-term">授課學期</label>
+    <select name="term" id="teacher-term">
+      {% for term in terms %}
+        <option value="{{ term.pk }}" {% if selected_term.pk == term.pk %}selected{% endif %}>
+          {{ term.code }}{% if term.is_current %}（目前學期）{% endif %}
+        </option>
+      {% empty %}
+        <option value="">尚無授課學期</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="button">查詢</button>
+  </form>
+
+  <div class="teacher-dashboard__summary" aria-label="授課統計摘要">
+    <div class="teacher-dashboard__metric">
+      <span>授課科目</span>
+      <strong data-summary="course_count">{{ summary.course_count }}</strong>
+    </div>
+    <div class="teacher-dashboard__metric">
+      <span>授課 Section</span>
+      <strong data-summary="section_count">{{ summary.section_count }}</strong>
+    </div>
+    <div class="teacher-dashboard__metric">
+      <span>已選學生人次</span>
+      <strong data-summary="enrolled_count">{{ summary.enrolled_count }}</strong>
+    </div>
+    <div class="teacher-dashboard__metric">
+      <span>有效候補人次</span>
+      <strong data-summary="waiting_count">{{ summary.waiting_count }}</strong>
+    </div>
+  </div>
+  <div class="teacher-dashboard__refresh-status" role="status" aria-live="polite">
+    <span id="teacher-refresh-message"></span>
+    <span>最後更新：<time id="teacher-updated-at">{{ initial_updated_at|date:"Y-m-d H:i:s" }}</time></span>
+  </div>
+
+  {% if courses %}
+    <div class="teacher-dashboard__courses">
+      {% for course in courses %}
+        <section class="teacher-dashboard__course">
+          <div class="teacher-dashboard__course-heading">
+            <div>
+              <h2>{{ course.name }}</h2>
+              <p>{{ course.code }} · {{ course.term.code }} · {{ course.credits }} 學分</p>
+            </div>
+            <div class="teacher-dashboard__syllabus">
+              <span>教學大綱：{{ course.syllabus_status }}</span>
+              <a class="button" href="{% url 'admin:courses_course_teacher_syllabus' course.pk %}">
+                教學大綱管理
+              </a>
+            </div>
+          </div>
+
+          {% for section in course.section_list %}
+            <article class="teacher-dashboard__section" data-section-id="{{ section.pk }}">
+              <div class="teacher-dashboard__section-heading">
+                <h3>{{ section.label }} 班</h3>
+                <a class="button" href="{% url 'admin:courses_course_teacher_section_roster' section.pk %}">
+                  查看選課學生
+                </a>
+              </div>
+              <dl class="teacher-dashboard__details">
+                <div><dt>上課時間</dt><dd>{{ section.get_day_display }} 第 {{ section.start_period }}–{{ section.end_period }} 節</dd></div>
+                <div><dt>教室</dt><dd>{{ section.room|default:"未安排" }}</dd></div>
+                <div><dt>已選／名額</dt><dd><span data-section-stat="enrolled">{{ section.dashboard_enrolled_count }}</span> / {{ section.capacity }}</dd></div>
+                <div><dt>剩餘名額</dt><dd data-section-stat="remaining">{{ section.remaining }}</dd></div>
+                <div><dt>有效候補</dt><dd data-section-stat="waiting">{{ section.dashboard_waiting_count }}</dd></div>
+              </dl>
+              <div class="teacher-dashboard__capacity">
+                <div class="teacher-dashboard__progress" role="progressbar"
+                     aria-label="{{ section.course.name }} {{ section.label }} 班選課名額"
+                     aria-valuemin="0" aria-valuemax="{{ section.capacity }}"
+                     aria-valuenow="{{ section.dashboard_enrolled_count }}">
+                  <span data-section-stat="progress" style="width: {{ section.progress }}%"></span>
+                </div>
+                {% if section.over_capacity %}
+                  <span class="teacher-dashboard__over-capacity" data-section-stat="over-capacity">超額</span>
+                {% else %}
+                  <span data-section-stat="over-capacity"></span>
+                {% endif %}
+              </div>
+            </article>
+          {% empty %}
+            <p class="teacher-dashboard__empty">本學期尚未安排授課班別。</p>
+          {% endfor %}
+
+          {% if course.fixed_schedule_entries %}
+            <h3>班級固定課程</h3>
+            {% for entry in course.fixed_schedule_entries %}
+              <article class="teacher-dashboard__section teacher-dashboard__section--fixed">
+                <div class="teacher-dashboard__section-heading">
+                  <h3>{{ entry.snapshot.class_group.name_zh|default:entry.snapshot.class_group.code }}</h3>
+                  <a class="button" href="{% url 'admin:courses_course_teacher_syllabus' course.pk %}">
+                    教學大綱管理
+                  </a>
+                </div>
+                <dl class="teacher-dashboard__details">
+                  <div><dt>固定課程</dt><dd>{{ entry.course_code }} · {{ entry.course_name }}</dd></div>
+                  <div><dt>上課時間</dt><dd>星期 {{ entry.weekday }} · 第 {{ entry.start_period }}–{{ entry.end_period }} 節</dd></div>
+                  <div><dt>教室</dt><dd>{{ entry.classroom|default:"未安排" }}</dd></div>
+                  <div><dt>學期</dt><dd>{{ entry.snapshot.term.code }}</dd></div>
+                  <div><dt>名額／Enrollment</dt><dd>班級固定課程不建立 Enrollment</dd></div>
+                  <div><dt>課綱狀態</dt><dd>{{ course.syllabus_status }}</dd></div>
+                </dl>
+              </article>
+            {% endfor %}
+          {% endif %}
+        </section>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="teacher-dashboard__empty-state">
+      <h2>本學期尚未安排授課課程</h2>
+      <p>如需確認授課安排，請洽課程維護員。</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extrabody %}
+{{ block.super }}
+<script>
+(() => {
+  const dashboard = document.querySelector(".teacher-dashboard");
+  if (!dashboard || !dashboard.dataset.statsUrl) return;
+
+  const message = document.getElementById("teacher-refresh-message");
+  const updatedAt = document.getElementById("teacher-updated-at");
+  const refreshButton = document.getElementById("teacher-refresh");
+  const term = dashboard.dataset.term;
+  const endpoint = new URL(dashboard.dataset.statsUrl, window.location.origin);
+  if (term) endpoint.searchParams.set("term", term);
+  let timer = null;
+  let inFlight = false;
+  let stopped = false;
+  let activeRequest = null;
+
+  const setSummary = (summary) => {
+    Object.entries(summary).forEach(([key, value]) => {
+      const element = dashboard.querySelector(`[data-summary="${key}"]`);
+      if (element) element.textContent = String(value);
+    });
+  };
+
+  const updateSections = (sections) => {
+    sections.forEach((section) => {
+      const card = dashboard.querySelector(`[data-section-id="${section.id}"]`);
+      if (!card) return;
+      card.querySelector('[data-section-stat="enrolled"]').textContent = String(section.enrolled);
+      card.querySelector('[data-section-stat="waiting"]').textContent = String(section.waiting);
+      card.querySelector('[data-section-stat="remaining"]').textContent = String(section.remaining);
+      const progress = card.querySelector('[data-section-stat="progress"]');
+      progress.style.width = `${section.progress}%`;
+      const progressBar = progress.parentElement;
+      progressBar.setAttribute("aria-valuemax", String(section.capacity));
+      progressBar.setAttribute("aria-valuenow", String(section.enrolled));
+      const overCapacity = card.querySelector('[data-section-stat="over-capacity"]');
+      overCapacity.textContent = section.over_capacity
+        ? `超額 ${section.enrolled - section.capacity}`
+        : "";
+    });
+  };
+
+  const refresh = async () => {
+    if (inFlight || stopped || document.hidden) return;
+    inFlight = true;
+    activeRequest = new AbortController();
+    const timeout = window.setTimeout(() => activeRequest.abort(), 8000);
+    try {
+      const response = await fetch(endpoint, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: {"Accept": "application/json"},
+        cache: "no-store",
+        signal: activeRequest.signal,
+      });
+      if (response.redirected || response.status === 401 || response.status === 403) {
+        stopped = true;
+        message.textContent = "登入狀態已失效或權限已變更，請重新登入後再開啟教師管理中心。";
+        stopPolling();
+        return;
+      }
+      if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) {
+        throw new Error("統計資料暫時無法更新");
+      }
+      const data = await response.json();
+      setSummary(data.summary);
+      updateSections(data.sections);
+      updatedAt.textContent = new Date(data.updated_at).toLocaleString("zh-TW", {hour12: false});
+      message.textContent = "資料已更新";
+    } catch (error) {
+      if (error.name !== "AbortError" || !stopped) {
+        message.textContent = "更新失敗，保留上次載入的資料；請稍後重試。";
+      }
+    } finally {
+      window.clearTimeout(timeout);
+      activeRequest = null;
+      inFlight = false;
+    }
+  };
+
+  const stopPolling = () => {
+    if (timer !== null) {
+      window.clearInterval(timer);
+      timer = null;
+    }
+  };
+
+  const startPolling = () => {
+    stopPolling();
+    if (!stopped && !document.hidden) {
+      refresh();
+      timer = window.setInterval(refresh, 10000);
+    }
+  };
+
+  refreshButton.addEventListener("click", refresh);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) stopPolling();
+    else startPolling();
+  });
+  window.addEventListener("pagehide", () => {
+    stopPolling();
+    if (activeRequest) activeRequest.abort();
+  }, {once: true});
+  startPolling();
+})();
+</script>
+{% endblock %}

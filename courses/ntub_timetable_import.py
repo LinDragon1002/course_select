@@ -456,6 +456,7 @@ def import_payload(payload: dict[str, Any]) -> ImportSummary:
             snapshot, created = NtubTimetableSnapshot.objects.get_or_create(
                 class_group=class_group,
                 term=term,
+                source_kind=NtubTimetableSnapshot.SourceKind.IMPORTED,
                 defaults={
                     "class_name": class_name,
                     "source_url": _text(source.get("source_url")),

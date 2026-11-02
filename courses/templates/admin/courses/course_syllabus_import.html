@@ -1,0 +1,67 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">首頁</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label='courses' %}">課程</a>
+  &rsaquo; <a href="{% url 'admin:courses_course_change' course.pk %}">{{ course }}</a>
+  &rsaquo; DOCX 教學大綱匯入
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>DOCX 教學大綱匯入預覽</h1>
+  <p>課程：{{ course }}</p>
+  {% if error_message %}<p class="errornote">{{ error_message }}</p>{% endif %}
+
+  {% if phase == "blocked" %}
+    <p>已發布內容不會因匯入操作而覆蓋。</p>
+    <p><a class="button" href="{% url 'admin:courses_course_change' course.pk %}">返回課程編輯</a></p>
+  {% elif phase == "upload" %}
+    <p>僅接受不超過 5 MB 的 .docx。解析結果會先進入可編輯預覽，確認儲存後仍為草稿。</p>
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="import_action" value="preview">
+      <fieldset class="module aligned">
+        {{ upload_form.as_p }}
+      </fieldset>
+      <div class="submit-row">
+        <button type="submit" class="default">解析並預覽</button>
+        <a class="button" href="{% url 'admin:courses_course_change' course.pk %}">取消</a>
+      </div>
+    </form>
+  {% elif phase == "preview" %}
+    <fieldset class="module aligned">
+      <h2>待助教確認的欄位</h2>
+      {% if unresolved_labels %}
+        <p class="help">以下內容未能從文件辨識，請人工確認並補充；系統不會猜測或自動填入：</p>
+        <ul>{% for label in unresolved_labels %}<li>{{ label }}</li>{% endfor %}</ul>
+      {% else %}
+        <p class="help">文件辨識到所有固定欄位，請逐項確認後儲存為草稿。</p>
+      {% endif %}
+    </fieldset>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="import_action" value="confirm">
+      <fieldset class="module aligned">
+        <h2>可編輯匯入內容</h2>
+        {% for field in syllabus_form %}
+          <div class="form-row{% if field.name in unresolved_fields %} syllabus-field-pending{% endif %}">
+            {{ field.errors }}
+            <div>
+              {{ field.label_tag }}
+              {{ field }}
+              {% if field.name in unresolved_fields %}<p class="help">待確認：未從 DOCX 辨識到內容。</p>{% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </fieldset>
+      <div class="submit-row">
+        <button type="submit" class="default">確認內容並儲存草稿</button>
+        <a class="button" href="{% url 'admin:courses_course_change' course.pk %}">取消</a>
+      </div>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}

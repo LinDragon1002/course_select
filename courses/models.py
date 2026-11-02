@@ -42,6 +42,10 @@ class Course(models.Model):
         "AcademicDepartment", on_delete=models.PROTECT, null=True, blank=True,
         related_name="owned_courses", verbose_name="管理系所",
     )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="created_courses", verbose_name="建立者",
+    )
     code = models.CharField("課號", max_length=20)
     name = models.CharField("課名", max_length=100)
     teacher = models.ForeignKey(Teacher, on_delete=models.PROTECT, verbose_name="老師")
@@ -61,6 +65,98 @@ class Course(models.Model):
         return f"{self.code} {self.name}"
 
 
+class CourseTeachingSyllabus(models.Model):
+    """助教維護的結構化課綱，與官方同步快取分開保存。"""
+
+    class Status(models.TextChoices):
+        DRAFT = "DRAFT", "草稿"
+        PUBLISHED = "PUBLISHED", "已發布"
+
+    course = models.OneToOneField(
+        Course, on_delete=models.CASCADE, related_name="teaching_syllabus",
+        verbose_name="課程",
+    )
+    teaching_target = models.TextField("教學目標", blank=True)
+    teaching_matter = models.TextField("教學內容", blank=True)
+    weekly_progress = models.JSONField("18週進度", default=dict, blank=True)
+    assessment = models.TextField("成績評量", blank=True)
+    references = models.TextField("指定教科書及參考書籍", blank=True)
+    status = models.CharField(
+        "狀態", max_length=12, choices=Status.choices, default=Status.DRAFT,
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="updated_course_syllabi", verbose_name="更新者",
+    )
+    updated_at = models.DateTimeField("更新時間", auto_now=True)
+
+    class Meta:
+        verbose_name = "人工教學大綱"
+        verbose_name_plural = "人工教學大綱"
+
+    def __str__(self):
+        return f"{self.course}（{self.get_status_display()}）"
+
+
+class CourseSyllabusSubmission(models.Model):
+    """Teacher-submitted syllabus versions awaiting maintainer review."""
+
+    class Status(models.TextChoices):
+        DRAFT = "DRAFT", "草稿"
+        PENDING = "PENDING", "待助教審核"
+        RETURNED = "RETURNED", "退回修改"
+        PUBLISHED = "PUBLISHED", "已發布"
+
+    course = models.ForeignKey(
+        Course, on_delete=models.CASCADE, related_name="syllabus_submissions",
+        verbose_name="課程",
+    )
+    supersedes = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="resubmissions", verbose_name="前一提交版本",
+    )
+    teacher = models.ForeignKey(
+        Teacher, on_delete=models.PROTECT, related_name="syllabus_submissions",
+        verbose_name="提交教師",
+    )
+    teaching_target = models.TextField("教學目標", blank=True)
+    teaching_matter = models.TextField("教學內容", blank=True)
+    weekly_progress = models.JSONField("18週進度", default=dict, blank=True)
+    assessment = models.TextField("成績評量", blank=True)
+    references = models.TextField("指定教科書及參考書籍", blank=True)
+    status = models.CharField(
+        "審核狀態", max_length=16, choices=Status.choices, default=Status.DRAFT,
+    )
+    submitted_at = models.DateTimeField("提交時間", null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="reviewed_course_syllabus_submissions", verbose_name="審核人",
+    )
+    reviewed_at = models.DateTimeField("審核時間", null=True, blank=True)
+    return_reason = models.TextField("退回原因", blank=True)
+    created_at = models.DateTimeField("建立時間", auto_now_add=True)
+    updated_at = models.DateTimeField("更新時間", auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        verbose_name = "教師教學大綱提交"
+        verbose_name_plural = "教師教學大綱提交"
+        indexes = [
+            models.Index(fields=["status", "submitted_at"],
+                         name="course_syllabus_review_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["course"],
+                condition=models.Q(status="PENDING"),
+                name="course_one_pending_syllabus",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.course}（{self.get_status_display()}）"
+
+
 class Section(models.Model):
     """課程的一個班別：有自己的時間、教室、名額。學生加選的對象是班別，不是課程。"""
 
@@ -70,6 +166,10 @@ class Section(models.Model):
     PERIOD_SLOT_RANGES = {"am": (1, 3), "midday": (4, 6), "pm": (7, 9), "evening": (10, None)}
 
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="sections", verbose_name="課程")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="created_sections", verbose_name="建立者",
+    )
     label = models.CharField("班別", max_length=10)  # 例如 A / B / C
     day = models.PositiveSmallIntegerField("星期", choices=DAYS)
     start_period = models.PositiveSmallIntegerField("起始節次")
@@ -310,16 +410,42 @@ class StudentAcademicProfile(models.Model):
 
 
 class NtubTimetableSnapshot(models.Model):
-    """NTUB 官方班級課表快照：某個班級在某個學期，由學校公布的固定課表。
+    """班級固定課表的一個版本；官方匯入版與系所維護版並存追溯。
 
-    這是「班級基線」，不是任何學生的個人選課結果，所以不會產生 Enrollment。
-    同一組 (班級, 學期) 只有一筆快照，重複匯入時更新既有資料。
+    快照不是學生的個人選課結果，不會產生 Enrollment。官方匯入快照維持原始
+    來源版本；維護員接管後另建人工草稿，發布版優先供學生使用。
     """
+
+    class SourceKind(models.TextChoices):
+        IMPORTED = "IMPORTED", "官方匯入"
+        MAINTAINED = "MAINTAINED", "系所維護"
+
+    class Status(models.TextChoices):
+        DRAFT = "DRAFT", "草稿"
+        PUBLISHED = "PUBLISHED", "已發布"
+        ARCHIVED = "ARCHIVED", "歷史版本"
 
     class_group = models.ForeignKey(AcademicClassGroup, on_delete=models.PROTECT,
                                     related_name="timetable_snapshots", verbose_name="班級")
     term = models.ForeignKey(Term, on_delete=models.PROTECT,
                              related_name="timetable_snapshots", verbose_name="學期")
+    source_kind = models.CharField(
+        "版本來源", max_length=12, choices=SourceKind.choices,
+        default=SourceKind.IMPORTED,
+    )
+    status = models.CharField(
+        "版本狀態", max_length=12, choices=Status.choices,
+        default=Status.PUBLISHED,
+    )
+    managed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="maintained_timetable_snapshots", verbose_name="維護者",
+    )
+    supersedes = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="revisions", verbose_name="前一版本",
+    )
+    published_at = models.DateTimeField("發布時間", null=True, blank=True)
     class_name = models.CharField("班級名稱", max_length=100, blank=True)
     source_url = models.CharField("來源網址", max_length=500, blank=True)
     retrieved_at = models.DateTimeField("來源擷取時間", null=True, blank=True)
@@ -328,11 +454,26 @@ class NtubTimetableSnapshot(models.Model):
 
     class Meta:
         ordering = ["term__code", "class_group__code"]
-        verbose_name = "官方班級課表快照"
-        verbose_name_plural = "官方班級課表快照"
+        verbose_name = "班級固定課表"
+        verbose_name_plural = "班級固定課表"
         constraints = [
             models.UniqueConstraint(fields=["class_group", "term"],
-                                   name="ntub_timetable_snapshot_class_group_term_unique"),
+                                   condition=models.Q(source_kind="IMPORTED"),
+                                   name="timetable_imported_snapshot_class_term_unique"),
+            models.UniqueConstraint(
+                fields=["class_group", "term"],
+                condition=models.Q(
+                    source_kind="MAINTAINED", status="DRAFT",
+                ),
+                name="timetable_one_maintained_draft_per_class_term",
+            ),
+            models.UniqueConstraint(
+                fields=["class_group", "term"],
+                condition=models.Q(
+                    source_kind="MAINTAINED", status="PUBLISHED",
+                ),
+                name="timetable_one_maintained_published_per_class_term",
+            ),
         ]
 
     def __str__(self):
@@ -355,11 +496,24 @@ class NtubTimetableEntry(models.Model):
 
     snapshot = models.ForeignKey(NtubTimetableSnapshot, on_delete=models.CASCADE,
                                  related_name="entries", verbose_name="課表快照")
+    course = models.ForeignKey(
+        Course, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="fixed_timetable_entries", verbose_name="課程資料",
+    )
     entry_type = models.CharField("類型", max_length=20, choices=ENTRY_TYPES)
     course_code = models.CharField("課號", max_length=20, blank=True)
     official_serial = models.CharField("官方序號", max_length=20, blank=True)
     course_name = models.CharField("課名", max_length=100, blank=True)
+    teacher = models.ForeignKey(
+        Teacher, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="fixed_timetable_entries", verbose_name="授課教師",
+    )
     teacher_name = models.CharField("老師", max_length=50, blank=True)
+    credits = models.PositiveSmallIntegerField("學分", null=True, blank=True)
+    weekly_hours = models.DecimalField(
+        "每週時數", max_digits=5, decimal_places=2, null=True, blank=True,
+    )
+    course_category = models.CharField("必修類別", max_length=50, blank=True)
     classroom = models.CharField("教室", max_length=100, blank=True)
     weekday = models.PositiveSmallIntegerField("星期")
     start_period = models.PositiveSmallIntegerField("起始節次")
@@ -367,11 +521,12 @@ class NtubTimetableEntry(models.Model):
     periods = models.JSONField("節次清單", default=list, blank=True)
     raw_text = models.TextField("原始文字", blank=True)
     course_href = models.CharField("課程連結", max_length=500, blank=True)
+    is_active = models.BooleanField("啟用", default=True)
 
     class Meta:
         ordering = ["weekday", "start_period", "id"]
-        verbose_name = "官方課表明細"
-        verbose_name_plural = "官方課表明細"
+        verbose_name = "固定課表明細"
+        verbose_name_plural = "固定課表明細"
 
     def __str__(self):
         return f"週{self.weekday} {self.start_period}-{self.end_period} {self.course_name}".strip()
@@ -392,6 +547,10 @@ class OfficialTeachingSyllabus(models.Model):
     class_code = models.CharField("班級代碼", max_length=20)
     official_serial = models.CharField("官方序號", max_length=20)
     course_code = models.CharField("課號", max_length=20)
+    snapshot = models.ForeignKey(
+        NtubTimetableSnapshot, on_delete=models.CASCADE, null=True, blank=True,
+        related_name="teaching_syllabi", verbose_name="官方課表快照",
+    )
     course_name = models.CharField("中文課名", max_length=100, blank=True)
     course_name_en = models.CharField("英文課名", max_length=200, blank=True)
     credits = models.DecimalField("官方學分", max_digits=6, decimal_places=2,

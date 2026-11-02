@@ -10,12 +10,11 @@ from pathlib import Path
 from django.core.management import call_command
 from django.test import TestCase
 
-from ..management.commands.import_ntub_catalog import (DEFAULT_SOURCE,
-                                                       parse_sql_inserts)
+from ..management.commands.import_ntub_catalog import parse_sql_inserts
 from ..models import (AcademicCatalog, AcademicClassGroup, AcademicDepartment,
                        AcademicProgramType)
 
-SOURCE = Path(DEFAULT_SOURCE)
+SOURCE = Path(__file__).resolve().parent / "fixtures" / "ntub_academic_catalog_restore.sql"
 
 EXPECTED_PROGRAM_TYPES = 11
 EXPECTED_DEPARTMENTS = 74

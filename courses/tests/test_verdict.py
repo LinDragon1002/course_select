@@ -10,6 +10,7 @@ from ..services import register
 from ..standing import get_standing
 from ..verdict import evaluate
 from .base import CourseTestCase
+from .html_helpers import section_actions
 
 
 class VerdictTests(CourseTestCase):
@@ -143,6 +144,25 @@ class ButtonPreviewTests(CourseTestCase):
     def body(self):
         return self.client.get(reverse("course_list")).content.decode()
 
+    def row(self, section):
+        return section_actions(self.body())[str(section.pk)]
+
+    def assert_blocked(self, section, label):
+        row = self.row(section)
+        self.assertIn(
+            {"disabled": True, "type": "button", "text": label},
+            row["buttons"],
+        )
+        self.assertFalse(any(
+            form["action"] == reverse("enroll", args=[section.pk])
+            for form in row["forms"]
+        ))
+
+    def post_enrollment(self, section):
+        return self.client.post(
+            reverse("enroll", args=[section.pk]), {"next": reverse("course_list")},
+        )
+
     def past_course(self, code):
         past = Term.objects.get_or_create(code="113-2")[0]
         c, _ = Course.objects.get_or_create(term=past, code=code,
@@ -152,9 +172,16 @@ class ButtonPreviewTests(CourseTestCase):
     def test_full_section_shows_waitlist_button(self):
         a = self.section("A", "A", 1, 2, capacity=1)
         Enrollment.objects.create(user=get_user_model().objects.create_user("v"), section=a)
-        body = self.body()
-        self.assertIn("加入等待</button>", body)
-        self.assertNotIn("加選</button>", body)
+        row = self.row(a)
+        self.assertTrue(any(
+            form["action"] == reverse("enroll", args=[a.pk])
+            and any(button["text"] == "加入等待" for button in form["buttons"])
+            for form in row["forms"]
+        ))
+        response = self.post_enrollment(a)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Waitlist.objects.filter(user=self.u, section=a).exists())
+        self.assertFalse(Enrollment.objects.filter(user=self.u, section=a).exists())
 
     def test_waiting_shows_cancel_not_waitlist(self):
         a = self.section("A", "A", 1, 2, capacity=1)
@@ -168,44 +195,60 @@ class ButtonPreviewTests(CourseTestCase):
     def test_missing_prereq_shows_blocked(self):
         a = self.section("CS301", "A", 3, 5)
         a.course.prerequisites.set([self.past_course("CS201")])
-        body = self.body()
-        self.assertIn("缺先修", body)
-        self.assertNotIn("加選</button>", body)
+        self.assert_blocked(a, "缺先修")
+        response = self.post_enrollment(a)
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Enrollment.objects.filter(user=self.u, section=a).exists())
+        self.assertFalse(Waitlist.objects.filter(user=self.u, section=a).exists())
 
     def test_conflict_shows_blocked(self):
         a = self.section("A", "A", 1, 2)
         b = self.section("B", "A", 2, 3)
         register(self.u, a)
-        body = self.body()
-        self.assertIn("衝堂", body)  # B 班的列
-        self.assertIn("退選</button>", body)  # A 班的列
-        self.assertNotIn("加選</button>", body)
+        self.assert_blocked(b, "衝堂")
+        self.assertTrue(any(
+            form["action"] == reverse("drop", args=[a.pk])
+            for form in self.row(a)["forms"]
+        ))
+        response = self.post_enrollment(b)
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Enrollment.objects.filter(user=self.u, section=b).exists())
+        self.assertFalse(Waitlist.objects.filter(user=self.u, section=b).exists())
 
     @override_settings(MAX_CREDITS=3)
     def test_over_credits_shows_blocked(self):
         a = self.section("A", "A", 1, 2)
         b = self.section("B", "A", 4, 5)
         register(self.u, a)
-        body = self.body()
-        self.assertIn("超學分", body)
-        self.assertNotIn("加選</button>", body)
+        self.assert_blocked(b, "超學分")
+        response = self.post_enrollment(b)
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Enrollment.objects.filter(user=self.u, section=b).exists())
+        self.assertFalse(Waitlist.objects.filter(user=self.u, section=b).exists())
 
     def test_same_course_other_section_shows_blocked(self):
         a = self.section("A", "A", 1, 2)
         b = self.section("A", "B", 4, 5)
         register(self.u, a)
-        body = self.body()
-        self.assertIn("已選此課", body)  # B 班的列
-        self.assertIn("退選</button>", body)  # A 班的列
-        self.assertNotIn("加選</button>", body)
+        self.assert_blocked(b, "已選此課")
+        self.assertTrue(any(
+            form["action"] == reverse("drop", args=[a.pk])
+            for form in self.row(a)["forms"]
+        ))
+        response = self.post_enrollment(b)
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Enrollment.objects.filter(user=self.u, section=b).exists())
+        self.assertFalse(Waitlist.objects.filter(user=self.u, section=b).exists())
 
     def test_closed_window_shows_closed_on_all_rows(self):
-        self.section("A", "A", 1, 2)
+        a = self.section("A", "A", 1, 2)
         self.term.enroll_close = timezone.now() - timedelta(hours=1)
         self.term.save()
-        body = self.body()
-        self.assertIn("已截止", body)
-        self.assertNotIn("加選</button>", body)
+        self.assert_blocked(a, "已截止")
+        response = self.post_enrollment(a)
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Enrollment.objects.filter(user=self.u, section=a).exists())
+        self.assertFalse(Waitlist.objects.filter(user=self.u, section=a).exists())
 
     def test_closed_window_keeps_drop_button(self):
         # 截止後已加選者仍看得到「退選」（docs §7）
@@ -226,9 +269,11 @@ class ButtonPreviewTests(CourseTestCase):
         self.assertIn("取消等待</button>", body)
 
     def test_not_open_window_shows_not_open_on_all_rows(self):
-        self.section("A", "A", 1, 2)
+        a = self.section("A", "A", 1, 2)
         self.term.enroll_open = timezone.now() + timedelta(hours=1)
         self.term.save()
-        body = self.body()
-        self.assertIn("未開放", body)
-        self.assertNotIn("加選</button>", body)
+        self.assert_blocked(a, "未開放")
+        response = self.post_enrollment(a)
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Enrollment.objects.filter(user=self.u, section=a).exists())
+        self.assertFalse(Waitlist.objects.filter(user=self.u, section=a).exists())

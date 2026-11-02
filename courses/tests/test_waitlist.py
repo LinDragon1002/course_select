@@ -7,6 +7,7 @@ from .. import waitlist
 from ..models import Enrollment, Waitlist
 from ..services import drop_enrollment, register
 from .base import CourseTestCase
+from .html_helpers import section_actions
 
 
 class WaitlistTests(CourseTestCase):
@@ -75,8 +76,19 @@ class WaitlistTests(CourseTestCase):
         self.client.force_login(self.u)
         r = self.client.get(reverse("course_list"))
         self.assertContains(r, "等待中（第 1 位）")
-        self.assertContains(r, "取消等待</button>")
-        self.assertNotContains(r, "加選</button>")
+        row = section_actions(r.content.decode())[str(self.a.pk)]
+        self.assertTrue(any(
+            form["action"] == reverse("cancel_wait", args=[self.a.pk])
+            and any(button["text"] == "取消等待" for button in form["buttons"])
+            for form in row["forms"]
+        ))
+
+        response = self.client.post(
+            reverse("cancel_wait", args=[self.a.pk]),
+            {"next": reverse("course_list")},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Waitlist.objects.filter(user=self.u, section=self.a).exists())
 
     def test_cancel_wait_via_view(self):
         self.client.force_login(self.u)

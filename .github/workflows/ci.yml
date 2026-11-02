@@ -1,0 +1,27 @@
+name: CI
+
+# PR 觸發；push main 也跑一次，防止 bypass 合併後 main 紅燈。
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Django system check
+        run: uv run manage.py check
+
+      - name: Run unit tests
+        run: uv run manage.py test

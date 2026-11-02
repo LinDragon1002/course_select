@@ -1,4 +1,4 @@
-<li{% if in_course_detail %} id="section-{{ s.pk }}"{% endif %} class="course-row{% if in_course_detail %} course-row--detail{% else %} course-row--list{% endif %}">
+<li data-section-id="{{ s.pk }}"{% if in_course_detail %} id="section-{{ s.pk }}"{% endif %} class="course-row{% if in_course_detail %} course-row--detail{% else %} course-row--list{% endif %}">
   <div class="identity">
     {% if in_course_detail %}
       <span class="course-name">{{ s.label_display }}</span>

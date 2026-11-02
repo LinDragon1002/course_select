@@ -77,7 +77,7 @@ class AdminDashboardTests(TestCase):
         self.assertEqual(
             [item["text"] for item in ADMIN_MENU],
             ["管理總覽", "課程規劃", "班級固定課表",
-             "學籍與班級", "選課與候補", "系統管理"])
+             "歷史匯入與來源追蹤", "學籍與班級", "選課與候補", "系統管理"])
 
     def test_superuser_can_assign_cross_program_departments_in_one_form(self):
         force_admin_login(self.client, self.superuser)

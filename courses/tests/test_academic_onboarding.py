@@ -25,6 +25,7 @@ from django.urls import reverse
 from ..models import (AcademicCatalog, AcademicClassGroup, AcademicDepartment,
                       AcademicProgramType, Course, Enrollment, Section,
                       StudentAcademicProfile, Teacher, Term)
+from .session_helpers import force_admin_login
 
 FAKE_GOOGLE_SETTINGS = {
     "google": {
@@ -403,11 +404,16 @@ class AdminTests(AcademicTestCase):
                                                           password="staff-pass-123")
         self.client.force_login(staff)
         r = self.client.get(reverse("admin:index"))
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r.headers["Location"], "/admin/login/?next=/admin/")
+
+        force_admin_login(self.client, staff)
+        r = self.client.get(reverse("admin:index"))
         self.assertEqual(r.status_code, 200)
 
     def test_admin_changelist_for_student_profiles(self):
         staff = get_user_model().objects.create_superuser("staff", email="s@example.com",
                                                           password="staff-pass-123")
-        self.client.force_login(staff)
+        force_admin_login(self.client, staff)
         r = self.client.get(reverse("admin:courses_studentacademicprofile_changelist"))
         self.assertEqual(r.status_code, 200)

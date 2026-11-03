@@ -10,8 +10,20 @@ from courses.admin_navigation import ADMIN_MENU
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-change-me")
-DEBUG = os.environ.get("DEBUG", "1") == "1"
+def env_bool(name, default=False):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+DEBUG = env_bool("DEBUG", default=True)
 ALLOWED_HOSTS = ["*"] if DEBUG else os.environ.get("ALLOWED_HOSTS", "").split(",")
+APP_ENV = os.environ.get("APP_ENV", "production").strip().lower()
+ALLOW_ANY_GOOGLE_EMAIL_FOR_DEMO = env_bool(
+    "ALLOW_ANY_GOOGLE_EMAIL_FOR_DEMO",
+    default=False,
+)
 
 INSTALLED_APPS = [
     # django_components 必須在前面：AdminLTE 4 的元件（component）依賴它。
@@ -97,8 +109,8 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 SESSION_COOKIE_NAME = "sessionid"
 
 # --- 登入 ---
-# 學生一律走 Google OAuth（/login/ → Google）；只有經 Google 驗證的
-# @ntub.edu.tw 信箱能登入，判斷在伺服器端（courses.adapters.NtubSocialAccountAdapter）。
+# 學生一律走 Google OAuth（/login/ → Google）；正式環境只允許經 Google
+# 驗證的 @ntub.edu.tw 信箱，開發 Demo 可由設定開放其他信箱。
 # Django Admin 仍用 Django 自己的帳密登入（ModelBackend）。
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",

@@ -1,6 +1,7 @@
 """Google 登入的伺服器端把關。
 
-學生只能用「經 Google 驗證的 @ntub.edu.tw 信箱」登入。判斷全部在伺服器端做：
+正式環境學生只能用「經 Google 驗證的 @ntub.edu.tw 信箱」登入。
+開發 Demo 可在明確設定下允許經 Google 驗證的其他信箱。判斷全部在伺服器端做：
 資料來自 Google 回傳的 token／userinfo（不是前端，也不是使用者自己輸入的表單），
 所以不能只靠頁面上的提示擋人。
 """
@@ -10,6 +11,7 @@ from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.shortcuts import redirect
+from django.conf import settings
 
 from .teacher_access import SYLLABUS_TEACHER_GROUP_NAME
 
@@ -53,7 +55,13 @@ class NtubSocialAccountAdapter(DefaultSocialAccountAdapter):
     """在 allauth 建立／登入帳號之前，先檢查信箱網域與 Google 驗證狀態。"""
 
     def pre_social_login(self, request, sociallogin):
-        if not is_ntub_email(social_email(sociallogin)):
+        email = social_email(sociallogin)
+        allow_any_demo_email = (
+            settings.APP_ENV == "development"
+            and settings.DEBUG
+            and settings.ALLOW_ANY_GOOGLE_EMAIL_FOR_DEMO
+        )
+        if not allow_any_demo_email and not is_ntub_email(email):
             self._reject(request, REJECT_DOMAIN_MESSAGE)
         if not google_email_verified(sociallogin):
             self._reject(request, REJECT_UNVERIFIED_MESSAGE)

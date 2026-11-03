@@ -168,6 +168,34 @@ class GoogleLoginSuccessTests(GoogleLoginTestCase):
             self.client.get(reverse("admin:index")).status_code, 302,
         )
 
+    @override_settings(
+        APP_ENV="development",
+        DEBUG=True,
+        ALLOW_ANY_GOOGLE_EMAIL_FOR_DEMO=True,
+    )
+    def test_external_google_email_can_login_in_demo_mode(self):
+        response = self.google_login("example@gmail.com")
+
+        self.assertEqual(response.status_code, 302)
+        user = get_user_model().objects.get(email="example@gmail.com")
+        self.assertFalse(user.is_staff)
+        self.assertFalse(user.is_superuser)
+        self.assertFalse(user.groups.exists())
+
+    @override_settings(
+        APP_ENV="development",
+        DEBUG=False,
+        ALLOW_ANY_GOOGLE_EMAIL_FOR_DEMO=True,
+    )
+    def test_external_google_email_is_rejected_when_debug_is_disabled(self):
+        response = self.google_login("example@gmail.com")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], reverse("login"))
+        self.assertFalse(
+            get_user_model().objects.filter(email="example@gmail.com").exists()
+        )
+
     def test_second_login_reuses_same_user(self):
         self.google_login("s1234567@ntub.edu.tw")
         self.client.logout()
@@ -217,6 +245,34 @@ class GoogleLoginRejectionTests(GoogleLoginTestCase):
         self.assertEqual(r["Location"], reverse("login"))
         self.assertNotIn("_auth_user_id", self.client.session)
         self.assertFalse(get_user_model().objects.filter(email="someone@gmail.com").exists())
+
+    @override_settings(
+        APP_ENV="development",
+        DEBUG=True,
+        ALLOW_ANY_GOOGLE_EMAIL_FOR_DEMO=False,
+    )
+    def test_external_email_is_rejected_when_demo_flag_is_disabled(self):
+        response = self.google_login("someone@gmail.com")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], reverse("login"))
+        self.assertFalse(
+            get_user_model().objects.filter(email="someone@gmail.com").exists()
+        )
+
+    @override_settings(
+        APP_ENV="production",
+        DEBUG=True,
+        ALLOW_ANY_GOOGLE_EMAIL_FOR_DEMO=True,
+    )
+    def test_external_email_is_rejected_in_production_even_when_flag_is_enabled(self):
+        response = self.google_login("someone@gmail.com")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], reverse("login"))
+        self.assertFalse(
+            get_user_model().objects.filter(email="someone@gmail.com").exists()
+        )
 
     def test_unverified_ntub_email_is_rejected(self):
         r = self.google_login("s1234567@ntub.edu.tw", verified=False)
